@@ -2900,7 +2900,7 @@ window.__ModuleLoader__.load({
                 translate(t, 'fm.recursive'),
               )
             : null,
-          !isDelete && dialog.cwd !== undefined
+          !isDelete && !isRename && dialog.cwd !== undefined
             ? h('div', { style: { fontSize: '11.5px', color: INK_3 } }, translate(t, 'fm.createAt', { dir: dialog.cwd || '/' }))
             : null,
           dialog.error !== undefined && dialog.error !== null
