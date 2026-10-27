@@ -1,0 +1,12 @@
+# 依赖与构建产物（本插件无 npm 依赖，装了也别提交）
+node_modules/
+out/
+
+# 编辑器临时文件：file/write 的原子写会在目标同目录留下 .dsh-edit-*.tmp
+*.tmp
+.DS_Store
+*.log
+
+# 常见编辑器/IDE 目录
+.idea/
+.vscode/

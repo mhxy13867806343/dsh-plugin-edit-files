@@ -1,0 +1,61 @@
+{
+  "name": "dsh-plugin-edit-files",
+  "version": "0.1.0",
+  "description": "Edit files right inside the DSH right-Sidebar document preview, and review what differs from the git remote in a Sidebar tab.",
+  "type": "module",
+  "license": "MIT",
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "cordis-plugin",
+    "file-editor",
+    "git-diff"
+  ],
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "lib",
+    "cordis.patch.yml",
+    "cordis.patch.example.yml",
+    "locale/*.json",
+    "icon.svg",
+    "README.md",
+    "LICENSE"
+  ],
+  "meta": {
+    "title": "文件编辑 & Git 改动",
+    "description": "在右侧文件预览里直接编辑保存；在侧栏标签页里对比本地与远程的 git 差异，只列出真正不同的文件。"
+  },
+  "scripts": {
+    "test": "node test/host-selftest.mjs && node test/client-selftest.mjs",
+    "test:host": "node test/host-selftest.mjs",
+    "test:client": "node test/client-selftest.mjs",
+    "check": "node --check index.js && node --check client.js && node --check lib/config.js && node --check lib/files.js && node --check lib/git.js && node --check lib/router.js && node --check test/host-selftest.mjs && node --check test/client-selftest.mjs"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-sidebar-right",
+        "@deepseek-ai/dsh-client-ui-sidebar-documentpreview",
+        "@deepseek-ai/dsh-client-ui-workspace"
+      ]
+    }
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  }
+}

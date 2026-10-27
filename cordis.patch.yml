@@ -1,0 +1,12 @@
+# dsh-plugin-edit-files —— bundle patch（安装时由 plugin_manager 读取）
+
+- insert:
+    - id: edit-files
+      name: 'dsh-plugin-edit-files'
+      config:
+        # 单个文件的读取/编辑上限（字节）。超过就拒绝读、拒绝写，避免把 500MB 的日志塞进编辑器。
+        maxFileBytes: 2097152
+        # 一个文件的 unified diff 最多回多少行，超出截断并在响应里标记 truncated。
+        maxDiffLines: 4000
+        # 一次改动的文件列表最多回多少条（避免巨型仓库卡死面板）。
+        maxChangedFiles: 3000

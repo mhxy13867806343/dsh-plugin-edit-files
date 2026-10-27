@@ -1,0 +1,18 @@
+# dsh-plugin-edit-files —— 调参参考（仓库里给别人看的那一份）
+#
+# 本机实际加载的是 cordis.patch.yml（由 plugin_manager 安装时写入 profile 的 patch 层）。
+# 这一份只是把可调项抄出来方便阅读；改这里不会生效。
+#
+# 字段：
+#   maxFileBytes     单个文件读取/保存上限，默认 2097152（2 MiB）
+#   maxDiffLines     单个文件 diff 最多回传行数，默认 4000
+#   maxChangedFiles  一次 git 改动列表最多回传条数，默认 3000
+#
+# 例：
+# - insert:
+#     - id: edit-files
+#       name: 'dsh-plugin-edit-files'
+#       config:
+#         maxFileBytes: 4194304
+#         maxDiffLines: 8000
+#         maxChangedFiles: 5000

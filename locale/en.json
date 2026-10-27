@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "File Editing & Git Changes",
+    "description": "Edit and save files right in the right-sidebar preview, and compare your working tree with the upstream remote in a sidebar tab that lists only the files that really differ."
+  }
+}
