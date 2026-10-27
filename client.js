@@ -152,6 +152,7 @@ window.__ModuleLoader__.load({
       'fm.restarting': '正在重启…',
       'fm.restartFailed': '重启请求失败，请手动重启 DSH',
       'fm.dirUnavailable': '目录不可用',
+      'fm.switchHint': '选择后会切到该工作区的会话（左侧会话也会跟着定位）',
       'fm.workspaceMissing': '这个工作区的文件夹不存在',
       'fm.workspaceMissingHint': '记录的路径可能已被移动或删除：',
       'fm.recheck': '重新检测',
@@ -291,6 +292,7 @@ window.__ModuleLoader__.load({
       'fm.restarting': 'Restarting…',
       'fm.restartFailed': 'Restart request failed — please restart DSH manually',
       'fm.dirUnavailable': 'folder unavailable',
+      'fm.switchHint': 'Picking one also switches to that workspace conversation',
       'fm.workspaceMissing': 'This workspace folder does not exist',
       'fm.workspaceMissingHint': 'The recorded path may have been moved or deleted:',
       'fm.recheck': 'Recheck',
@@ -1043,6 +1045,25 @@ window.__ModuleLoader__.load({
       return data;
     }
 
+    /**
+     * 切会话前把目标会话的「会话页签选择」预写成就对话：
+     * 目标会话挂载时 ui-conversation 会按这份持久化偏好恢复页签，
+     * 这样从文件面板选工作区后，主区落在的是那个工作区的对话，而不是停在文件页。
+     */
+    function primeConversationView(sessionId, viewId) {
+      try {
+        const key = `dsh.conversation.${sessionId}`;
+        const raw = window.localStorage.getItem(key);
+        let stored = raw === null ? {} : JSON.parse(raw);
+        if (stored === null || typeof stored !== 'object' || Array.isArray(stored)) stored = {};
+        if (stored.view === viewId) return;
+        stored.view = viewId;
+        window.localStorage.setItem(key, JSON.stringify(stored));
+      } catch {
+        /* 存不了就算了，落回默认页签 */
+      }
+    }
+
     /** 工作区目录是否还在：打开选择器时懒校验一次，30 秒内复用。 */
     const workspaceHealthCache = new Map();
     async function workspaceHealthOf(path) {
@@ -1342,12 +1363,32 @@ window.__ModuleLoader__.load({
       return result;
     }
 
-    /** 在「文件」页签里切工作区：选择器 → 目标工作区 → 观察 → 切回。 */
+    /**
+     * 在「文件」页签里切工作区：选择器 → 目标工作区 → 观察会话/侧栏/面板 →
+     * 切回原会话并把面板恢复到原工作区。
+     */
     async function workspaceSwitchSelfTest(input) {
       const target = input !== null && typeof input === 'object' && typeof input.path === 'string' ? input.path : '';
+      const shouldRestore = !(input !== null && typeof input === 'object' && input.restore === false);
       const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-      const result = { target, tabOpened: false, menuItems: [], switched: false, missingRoot: false, missingTitle: null, text: '', restored: false, issues: [] };
+      const result = {
+        target,
+        tabOpened: false,
+        menuItems: [],
+        originalSession: onScreenSessionId() || null,
+        originalRoot: null,
+        expectedSession: null,
+        sessionAfterSwitch: null,
+        panelAfterSwitch: null,
+        sessionRowAfterSwitch: null,
+        switched: false,
+        restoredSession: null,
+        restoredRoot: null,
+        issues: [],
+      };
       const label = translate(runtime.t, 'fm.title');
+      const ctx = runtime.ctx;
+
       const tabButtons = () => {
         try {
           return [...document.querySelectorAll('[data-conversation-tabs] button[role="tab"]')];
@@ -1356,85 +1397,119 @@ window.__ModuleLoader__.load({
         }
       };
       const clickTab = (text) => {
-        const targetButton = tabButtons().find((button) => (button.textContent || '').trim() === text);
-        if (targetButton === undefined) return false;
-        targetButton.click();
+        const button = tabButtons().find((item) => (item.textContent || '').trim() === text);
+        if (button === undefined) return false;
+        button.click();
         return true;
       };
+      const pickerItems = () => [...document.querySelectorAll('[data-workspace-path]')];
       const openPicker = () => {
+        if (pickerItems().length > 0) return true;
         const trigger = document.querySelector('[data-ef-workspace-picker] button');
         if (trigger === null) return false;
         trigger.click();
         return true;
       };
-      const pickTrace = [];
-      const pick = async (path) => {
-        // 选择器可能已经打开了（第一次收集条目时点开过），别把它再点关
-        const hadMenu = document.querySelector('[data-workspace-path]') !== null;
-        pickTrace.push({ step: 'start', hadMenu, path });
-        if (!hadMenu) {
-          const opened = openPicker();
-          pickTrace.push({ step: 'openPicker', opened });
-          if (opened !== true) return { ok: false, trace: pickTrace };
-          await wait(350);
+      /** 打开选择器并等到条目真的渲染出来（最多约 1.5s）。 */
+      const ensurePickerItems = async () => {
+        for (let attempt = 0; attempt < 15; attempt += 1) {
+          if (pickerItems().length > 0) return true;
+          if (attempt === 0 || attempt % 3 === 0) openPicker();
+          await wait(120);
         }
-        const selector = `[data-workspace-path="${path.replace(/"/gu, '\\"')}"]`;
-        const item = document.querySelector(selector);
-        pickTrace.push({ step: 'query', selector, found: item !== null, count: document.querySelectorAll('[data-workspace-path]').length });
-        if (item === null) return { ok: false, trace: pickTrace };
+        return pickerItems().length > 0;
+      };
+      const clickItem = async (path) => {
+        if ((await ensurePickerItems()) !== true) return false;
+        const item = document.querySelector(`[data-workspace-path="${path}"]`);
+        if (item === null) return false;
         item.click();
-        pickTrace.push({ step: 'clicked' });
-        return { ok: true, trace: pickTrace };
+        return true;
       };
 
-      const originalPanel = document.querySelector('[data-edit-files-panel]');
-      const originalRoot = originalPanel === null ? undefined : originalPanel.getAttribute('data-ef-root');
+      const expected = [...workspaceIndex.values()].find((record) => record.path === target);
+      result.expectedSessions = expected !== undefined && Array.isArray(expected.sessionIds) ? expected.sessionIds : [];
+
       if (clickTab(label) !== true) {
         result.issues = renderIssues.slice(-5);
         return result;
       }
       result.tabOpened = true;
-      await wait(900);
-      const before = document.querySelector('[data-edit-files-panel]');
-      if (before !== null) result.originalRoot = before.getAttribute('data-ef-root');
-
-      if (openPicker() !== true) {
+      let panel = null;
+      for (let attempt = 0; attempt < 20; attempt += 1) {
+        await wait(200);
+        panel = document.querySelector('[data-edit-files-panel]');
+        if (panel !== null) break;
+        if (attempt % 4 === 0) clickTab(label);
+      }
+      result.originalRoot = panel === null ? null : panel.getAttribute('data-ef-root');
+      if (panel === null) {
         result.issues = renderIssues.slice(-5);
         return result;
       }
-      await wait(500);
-      result.menuItems = [...document.querySelectorAll('[data-workspace-path]')].map((item) => ({
+
+      // 记录选择器条目（含缺失标记）
+      if ((await ensurePickerItems()) !== true) {
+        result.issues = renderIssues.slice(-5);
+        return result;
+      }
+      result.menuItems = pickerItems().map((item) => ({
         path: item.getAttribute('data-workspace-path'),
-        text: (item.textContent || '').trim(),
         active: item.getAttribute('data-active') === '1',
         missing: (item.textContent || '').indexOf(translate(runtime.t, 'fm.missingTag')) >= 0,
       }));
 
-      const pickOutcome = await pick(target);
-      result.debugPick = pickOutcome;
-      if (pickOutcome.ok === true) {
-        result.switched = true;
-        await wait(900);
-        const panel = document.querySelector('[data-edit-files-panel]');
-        const missingCard = panel === null ? null : panel.querySelector('[data-ef-missing-root]');
-        result.missingRoot = missingCard !== null;
-        result.missingTitle = missingCard === null ? null : (missingCard.textContent || '').trim().slice(0, 120);
-        result.text = panel === null ? '' : (panel.innerText || '').slice(0, 300);
+      // 切到目标工作区
+      result.switched = (await clickItem(target)) === true;
+      for (let attempt = 0; attempt < 20; attempt += 1) {
+        await wait(200);
+        if ((onScreenSessionId() || null) !== result.originalSession) break;
       }
-
-      // 切回原来的工作区
-      if (typeof result.originalRoot === 'string' && result.originalRoot.length > 0) {
-        const back = await pick(result.originalRoot);
-        result.debugRestore = back;
-        if (back.ok === true) {
-          await wait(700);
-          result.restored = document.querySelector('[data-ef-missing-root]') === null;
+      result.sessionAfterSwitch = onScreenSessionId() || null;
+      result.sessionChanged = result.sessionAfterSwitch !== result.originalSession;
+      result.expectedMatch = result.expectedSessions.indexOf(result.sessionAfterSwitch) >= 0;
+      result.panelAfterSwitch = document.querySelector('[data-edit-files-panel]') !== null;
+      result.tabsAfterSwitch = (() => {
+        try {
+          return [...document.querySelectorAll('[data-conversation-tabs] button[role="tab"]')].map((button) => ({
+            label: (button.textContent || '').trim(),
+            selected: button.getAttribute('aria-selected') === 'true',
+          }));
+        } catch {
+          return [];
+        }
+      })();
+      if (result.sessionAfterSwitch !== null) {
+        try {
+          const row = document.querySelector(`[data-row-key="session:${result.sessionAfterSwitch}"]`);
+          const rect = row === null ? null : row.getBoundingClientRect();
+          const viewport = window.innerHeight || document.documentElement.clientHeight || 0;
+          result.sessionRowAfterSwitch = row === null ? null : {
+            className: typeof row.className === 'string' ? row.className : '',
+            title: (row.textContent || '').trim().slice(0, 80),
+            inViewport: rect === null ? null : rect.top >= 0 && rect.bottom <= viewport,
+            top: rect === null ? null : Math.round(rect.top),
+            viewport,
+          };
+        } catch {
+          result.sessionRowAfterSwitch = null;
         }
       }
-      const firstTab = tabButtons()[0];
-      if (firstTab !== undefined) {
-        firstTab.click();
-        await wait(300);
+
+      // 恢复：切回原会话 → 打开「文件」页签
+      if (shouldRestore && typeof result.originalSession === 'string' && result.originalSession.length > 0 && ctx !== null && ctx.uiWorkspace) {
+        try {
+          ctx.uiWorkspace.openSession(result.originalSession);
+        } catch (error) {
+          result.issues.push(String(error && error.message ? error.message : error));
+        }
+        await wait(1200);
+        result.restoredSession = onScreenSessionId() || null;
+        clickTab(label);
+        await wait(900);
+        // 面板的 root 是全局持久化的（切工作区时已写入），不需要再点选择器
+        const restoredPanel = document.querySelector('[data-edit-files-panel]');
+        result.restoredRoot = restoredPanel === null ? null : restoredPanel.getAttribute('data-ef-root');
       }
       result.issues = renderIssues.slice(-5);
       return result;
@@ -1682,6 +1757,7 @@ window.__ModuleLoader__.load({
                       type: 'object',
                       properties: {
                         path: { type: 'string', description: '要切过去的另一个工作区绝对路径' },
+                        restore: { type: 'boolean', description: '切换后是否切回原会话（默认 true；false 用于把 UI 停在该工作区）' },
                       },
                       required: ['path'],
                       additionalProperties: false,
@@ -3356,6 +3432,65 @@ window.__ModuleLoader__.load({
         }
       };
 
+      /**
+       * 选择工作区 = 切到那个工作区（和首页工作区选择器一致）：
+       *   · 把文件面板记住的 root 换成它（持久化，重开面板还是它）；
+       *   · 切到该工作区最近的一个会话 —— 左侧边栏会高亮/滚动过去，主区切到对应对话；
+       *   · 该工作区还没有会话时只切文件面板，不主动创建空会话。
+       */
+      const switchToWorkspace = (record) => {
+        const ctx = runtime.ctx;
+        const sessionIds = record !== null && record !== undefined && Array.isArray(record.sessionIds) ? record.sessionIds : [];
+        if (ctx === null || ctx === undefined || sessionIds.length === 0) return null;
+        if (typeof ctx.uiWorkspace === 'undefined' || ctx.uiWorkspace === null || typeof ctx.uiWorkspace.openSession !== 'function') return null;
+
+        // 挑「最新的、侧栏里真正可见」的会话：
+        //   · 优先按全局会话顺序（新→旧）过滤出该工作区的成员，再看侧栏顺序；
+        //   · 跳过 blank 会话（那些是还没开始聊的「新会话」，侧栏里不显示）；
+        //   · 优先有标题的，避免切过去是一个空会话。
+        const byId = sessions !== null && sessions !== undefined && sessions.byId !== null && typeof sessions.byId === 'object' ? sessions.byId : {};
+        const members = new Set(sessionIds);
+        const listed = Array.isArray(sessions === null || sessions === undefined ? undefined : sessions.ids) ? sessions.ids.filter((id) => members.has(id)) : [];
+        const pool = listed.length > 0 ? listed : sessionIds;
+        const visible = pool.filter((id) => {
+          const row = byId[id];
+          if (row === undefined) return false;
+          if (row.blank === true) return false;
+          if (Array.isArray(sessions.archivedSessionIds) && sessions.archivedSessionIds.indexOf(id) >= 0) return false;
+          return true;
+        });
+        const titled = visible.filter((id) => {
+          const row = byId[id];
+          return row !== undefined && typeof row.title === 'string' && row.title.length > 0;
+        });
+        const sessionId = titled.length > 0 ? titled[0] : visible.length > 0 ? visible[0] : pool[0];
+        if (typeof sessionId !== 'string' || sessionId.length === 0) return null;
+        if (sessionId === currentSessionId) return sessionId;
+        // 目标会话要落在「对话」页签：文件面板选工作区 = 切到那边去聊天
+        primeConversationView(sessionId, 'chat');
+        try {
+          ctx.uiWorkspace.openSession(sessionId);
+        } catch (error) {
+          console.warn(LOG + '切换工作区会话失败：', error);
+          return null;
+        }
+        // 侧栏把目标会话滚进可视区（DSH 自己通常会 reveal，这里兜底，只在看不见时滚）
+        let attempts = 0;
+        const reveal = setInterval(() => {
+          attempts += 1;
+          const row = document.querySelector(`[data-row-key="session:${sessionId}"]`);
+          if (row !== null && typeof row.scrollIntoView === 'function') {
+            const rect = row.getBoundingClientRect();
+            const viewport = window.innerHeight || document.documentElement.clientHeight || 0;
+            if (rect.top < 0 || rect.bottom > viewport) row.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+            clearInterval(reveal);
+            return;
+          }
+          if (attempts > 25) clearInterval(reveal);
+        }, 120);
+        return sessionId;
+      };
+
       const selectedWorkspaceTitle = (() => {
         const match = workspaceList.find((item) => item.path === root);
         if (match !== undefined) return match.title;
@@ -3428,7 +3563,15 @@ window.__ModuleLoader__.load({
                     'data-active': selected ? '1' : undefined,
                     onClick: () => {
                       setPickerOpen(false);
-                      if (item.path !== root) setRoot(item.path);
+                      if (item.path !== root) {
+                        storeRoot(item.path);
+                        setRoot(item.path);
+                      }
+                      // 目录缺失的工作区不切会话：留在面板里把「选中的文件夹不存在」展示清楚
+                      if (health === 'missing') return;
+                      // 即使面板本来就在这个工作区，也要把会话切过去：
+                      // 左侧边栏高亮/滚动 + 主区切到对应对话。
+                      switchToWorkspace(item);
                     },
                     style: {
                       width: '100%',
@@ -3459,6 +3602,7 @@ window.__ModuleLoader__.load({
                   selected ? h('span', { style: { flex: 'none', display: 'flex', color: BRAND } }, h(IconCheck, { size: 13 })) : null,
                 );
               }),
+              h('div', { style: { padding: '6px 8px 4px', fontSize: '11px', color: INK_3, borderTop: `0.5px solid ${LINE_1}`, marginTop: '4px' } }, translate(t, 'fm.switchHint')),
             )
           : null,
       );
