@@ -38,7 +38,15 @@ function check(name, run) {
 
 // 注册阶段只把组件函数交给 slot，不会真的渲染；所以这里给一个纯桩就够，
 // 自检不依赖 DSH 安装目录，任何机器上都能跑。
+class StubComponent {
+  constructor(props) {
+    this.props = props;
+    this.state = {};
+  }
+}
+
 const React = {
+  Component: StubComponent,
   createElement() {
     return null;
   },
@@ -122,6 +130,8 @@ const localeRegisters = [];
 const tabTypes = [];
 const effects = [];
 const injectedSlots = [];
+const injectedDeps = [];
+const inspectProviders = [];
 
 function makeCtx() {
   return {
@@ -162,6 +172,17 @@ function makeCtx() {
     },
     uiWorkspace: {
       openSession() {},
+    },
+    inject(deps, callback) {
+      injectedDeps.push([...deps]);
+      return callback({
+        cordisInspect: {
+          register(provider) {
+            inspectProviders.push(provider);
+            return () => {};
+          },
+        },
+      });
     },
     effect(run, label) {
       const dispose = run();
@@ -205,23 +226,44 @@ check('client.js 里 translate() 用到的 key 都能在字典里找到', () => 
   assert.deepEqual(missing, [], `缺 key: ${missing.join(', ')}`);
 });
 
-check('注册了六个 slot 入口', () => {
+check('注册了八个 slot 入口', () => {
   const seen = registrations.map((item) => `${item.options.name}#${item.options.id || item.options.key || ''}`);
   for (const expected of [
     'shell.overlay#edit-files-editor',
+    'shell.overlay#edit-files-workspace-bridge',
     'sidebar.right.tab.document.actions#edit-files-document',
     'sidebar.right.tab.files.actions#edit-files-files',
     'conversation.session.header.utilities#edit-files-git-badge',
     'sidebar.workspaces.session.menu.item#edit-files-git-menu',
+    'sidebar.workspaces.session.row.action#edit-files-git-row',
     'sidebar.right.pane.tab#dsh-plugin-edit-files/git',
   ]) {
     assert.ok(seen.indexOf(expected) >= 0, `缺注册：${expected}；实际：${seen.join(', ')}`);
   }
 });
 
-check('每个注册项都有可渲染组件且声明了 locale 命名空间', () => {
+check('没有 locale 的槽位用 id 注册（工作区快照桥）', () => {
+  const bridge = registrations.find((item) => item.options.id === 'edit-files-workspace-bridge');
+  assert.ok(bridge, '缺 edit-files-workspace-bridge 注册');
+  assert.equal(bridge.options.name, 'shell.overlay');
+});
+
+check('注册了 client inspect 自检 provider（EditFiles.probe）', () => {
+  assert.deepEqual(injectedDeps, [['cordisInspect']]);
+  assert.equal(inspectProviders.length, 1);
+  const provider = inspectProviders[0];
+  assert.equal(provider.manifest.id, 'EditFiles');
+  assert.equal(provider.manifest.methods[0].name, 'probe');
+  assert.equal(typeof provider.query, 'function');
+});
+
+check('每个注册项都有可渲染组件；带文案的声明了 locale 命名空间', () => {
   for (const item of registrations) {
     assert.equal(typeof item.Component, 'function', `${item.options.name} 的组件不是函数`);
+    if (item.options.id === 'edit-files-workspace-bridge') {
+      assert.equal(item.options.locale, undefined, '无渲染桥不该声明 locale');
+      continue;
+    }
     assert.equal(item.options.locale, 'dsh-plugin-edit-files');
   }
 });
@@ -244,10 +286,12 @@ check('slot inject 的等待顺序覆盖全部入口', () => {
   assert.deepEqual(injectedSlots.sort(), [
     'conversation.session.header.utilities',
     'shell.overlay',
+    'shell.overlay',
     'sidebar.right.pane.tab',
     'sidebar.right.tab.document.actions',
     'sidebar.right.tab.files.actions',
     'sidebar.workspaces.session.menu.item',
+    'sidebar.workspaces.session.row.action',
   ]);
 });
 
@@ -331,6 +375,51 @@ check('reasonText：把 Host reason 翻成人话', () => {
   assert.ok(internals.reasonText(t, 'not-found').includes('不存在'));
   assert.ok(internals.reasonText(t, 'git-unavailable').includes('git'));
 });
+
+console.log('\n[3] 页面侧自检 provider（用假 fetch 走一遍 probe）');
+
+const fetchCalls = [];
+globalThis.fetch = async (input, init) => {
+  const url = String(input);
+  fetchCalls.push({ url, method: init && init.method ? init.method : 'GET' });
+  const body = url.includes('/git/changes')
+    ? { ok: true, isRepo: true, base: 'origin/main', totals: { files: 2, additions: 5, deletions: 1 }, files: [{ path: 'a.md' }, { path: 'b.md' }] }
+    : url.includes('/git/info')
+      ? { ok: true, isRepo: true, base: 'origin/main', branch: 'main', baseKind: 'upstream' }
+      : url.includes('/git/file')
+        ? { ok: true, isRepo: true, file: { status: 'M' } }
+        : { ok: true, name: 'dsh-plugin-edit-files', version: '0.1.0', routes: [], limits: {} };
+  return { status: 200, json: async () => body };
+};
+
+try {
+  const probe = await inspectProviders[0].query('probe', { path: '/tmp/demo-repo' });
+  check('probe 返回页面地址与 health', () => {
+    assert.equal(probe.plugin, 'dsh-plugin-edit-files');
+    assert.equal(probe.health.ok, true);
+    assert.equal(probe.health.name, 'dsh-plugin-edit-files');
+    assert.ok(String(probe.pageUrl).startsWith('http://'));
+  });
+  check('probe 顺带查询 git（info/changes/file）', () => {
+    assert.equal(probe.git.info.isRepo, true);
+    assert.equal(probe.git.changes.isRepo, true);
+    assert.equal(probe.git.changes.files, 2);
+    assert.equal(probe.git.file.changed, true);
+  });
+  check('probe 只走同源 /api/edit-files 前缀', () => {
+    assert.ok(fetchCalls.length >= 4, `请求太少：${fetchCalls.map((call) => call.url).join(', ')}`);
+    for (const call of fetchCalls) assert.ok(call.url.includes('/api/edit-files/'), `越界请求：${call.url}`);
+  });
+  check('probe 回报渲染异常与桥状态字段', () => {
+    assert.ok(Array.isArray(probe.renderIssues));
+    assert.equal(typeof probe.workspaceMenuBridgeActive, 'boolean');
+    assert.equal(typeof probe.workspaceIndexSize, 'number');
+  });
+} catch (error) {
+  failed += 1;
+  failures.push({ name: 'probe 基线', error });
+  console.log(`  ✗ probe 基线 —— ${error && error.message ? error.message : error}`);
+}
 
 // ───────────────────────────────────────────────────────── 汇总
 

@@ -19,12 +19,13 @@
 ### 二、Git 改动（只列真正不同的文件）
 
 - **只在 git 仓库里出现**：从当前目录向上找仓库根；不是仓库时，客户端**不渲染任何 git 入口**。
-- 四个入口打开同一个「Git 改动」右栏标签页：
-  - 会话「⋯」菜单里的「Git 改动」（行尾直接显示改动文件数）；
+- 五个入口打开同一个「Git 改动」右栏标签页：
+  - **工作区分组标题的「⋯」菜单**：多出第一行「Git 改动」（行尾直接显示改动文件数）——就是侧栏里 `dsh-plugin-edit-files ▾ ⋯` 那颗按钮的菜单；
+  - 会话行右侧 hover 出来的 git 图标（有改动时带数字）；
+  - 会话「⋯」菜单里的「Git 改动」；
   - 会话头部（Session header）的 git 徽标（有改动时显示数字）；
-  - 右侧文件树工具栏的 git 按钮（显示当前目录改动数）；
-  - 右侧文档预览工具栏的 git 标识——只在当前文件确实与远程不同时亮起，并显示 M/A/D 状态字母。
-- 说明：DSH 这一版的「工作区分组标题」右键菜单（重命名 / 删除工作区）是 ui-workspace 里写死的，**没有给插件留槽位**，所以 git 入口放在上面这些会话级 / 文件级的位置；它们同样只在 git 仓库里出现。
+  - 右侧文件树工具栏的 git 按钮；文档预览工具栏的 git 标识只在当前文件确实与远程不同时亮起，并显示 M/A/D 状态字母。
+- 说明：DSH 这一版「工作区分组 ⋯ 菜单」的两项（重命名 / 删除工作区）是 ui-workspace 里写死的，**没有给插件留 slot**。工作区菜单里的那一行是插件在菜单打开时把一行克隆进它的 DOM 得到的（克隆原生行 → 样式与键盘走查跟原生一致；只在该工作区确是 git 仓库时才插）。实现包在 try/catch 里，DSH 改版导致结构对不上时最多是这个增强失效，不会影响其它入口。
 - 对比基准是**上游远程分支**（例如 `origin/main`），不是简单的 `git status`：本地已提交但还没推送的改动、未提交的暂存/工作区修改、未跟踪的新文件，全都统一拿来和上游比。改回与远程一致的文件会自动从列表消失——这正是需求。
 - 列表只显示真正不一样的文件，带状态字母（A/M/D/R/C/T/U）和增删行数；点某个文件看 unified diff，未跟踪的新文件直接显示全文。
 - 顶部顺带显示分支、相对上游的领先 / 落后提交数；没有上游时依次退回 `origin/HEAD`、`HEAD`（此时会写明「对比 HEAD」）；空仓库把所有文件当未跟踪列出。
@@ -133,6 +134,21 @@ node test/client-selftest.mjs
 ```
 
 `host-selftest.mjs` 在 `os.tmpdir()` 下建临时的 bare 远程 + clone 仓库，把契约语义跑一遍：干净仓库不列文件、改回一致自动消失、未跟踪 / 删除 / 重命名、diff、读写往返、冲突、CRLF / BOM 保留、二进制与超限拒绝等，结束后清理临时目录。`client-selftest.mjs` 离线加载 `client.js`，检查 slot 注册、locale 字典完整性和几个纯函数。仓库没有构建步骤，`client.js` 直接由 DSH 页面加载。
+
+### 插件自带自检入口（排查「按钮没出现」）
+
+Host 与 Client 各注册了一个只读的 `cordis_inspect` 提供者 `EditFiles`，agent 可以直接问：
+
+```text
+cordis_inspect_query({ platform: "client", provider: "EditFiles", method: "probe" })        // Host 路由可达性 + git 结果 + 渲染异常
+cordis_inspect_query({ platform: "client", provider: "EditFiles", method: "dom" })          // 页面上实际渲染出的控件/工作区索引/菜单增强日志
+cordis_inspect_query({ platform: "client", provider: "EditFiles", method: "menuSelfTest" }) // 程序化点开工作区「⋯」菜单，确认 Git 行被插入
+cordis_inspect_query({ platform: "client", provider: "EditFiles", method: "editorSelfTest", input: { path: "/abs/file.md" } })
+cordis_inspect_query({ platform: "client", provider: "EditFiles", method: "openTabSelfTest", input: { path: "/abs/repo" } })
+cordis_inspect_query({ platform: "host", provider: "EditFiles", method: "status" })          // 重启后可用：路由注册结果 + 浏览器调用计数
+```
+
+前四个跑在页面里（Client 平台），最后一个跑在 Host；`menuSelfTest` / `openTabSelfTest` / `editorSelfTest` 会短暂操作 UI 后自己恢复原状。
 
 ## 许可证
 

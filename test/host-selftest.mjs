@@ -49,8 +49,31 @@ async function git(args, cwd) {
 
 function collectRoutes(config) {
   const registered = [];
-  const ctx = { connection: { fetch: { register: (route) => registered.push(route) } } };
+  const inspectProviders = [];
+  const ctx = {
+    connection: { fetch: { register: (route) => registered.push(route) } },
+    effect(run) {
+      const dispose = run();
+      return () => {
+        if (typeof dispose === 'function') dispose();
+      };
+    },
+    // Host 半边会尝试挂 cordis_inspect 自检入口；自检里给一个最小 registry，
+    // 既验证参数形状，也保证看不到 cordisInspect 的组合照常工作。
+    inject(deps, callback) {
+      assert.deepEqual(deps, ['cordisInspect']);
+      return callback({
+        cordisInspect: {
+          register(provider) {
+            inspectProviders.push(provider);
+            return () => {};
+          },
+        },
+      });
+    },
+  };
   apply(ctx, config);
+  collectRoutes.inspectProviders = inspectProviders;
   return registered;
 }
 
@@ -158,7 +181,18 @@ async function main() {
     });
 
     await test('apply 单条路由注册失败不会抛异常', async () => {
-      const ctx = { connection: { fetch: { register() { throw new Error('boom'); } } } };
+      const ctx = {
+        connection: { fetch: { register() { throw new Error('boom'); } } },
+        effect(run) {
+          const dispose = run();
+          return () => {
+            if (typeof dispose === 'function') dispose();
+          };
+        },
+        inject(_deps, callback) {
+          return callback({ cordisInspect: { register: () => () => {} } });
+        },
+      };
       assert.doesNotThrow(() => apply(ctx, {}));
     });
 
@@ -898,6 +932,22 @@ async function main() {
       assert.equal(response.status, 400);
       assert.equal(data.ok, false);
       assert.equal(data.reason, 'missing-path');
+    });
+
+    // ── 22. cordis_inspect 自检提供者 ──
+    await test('cordis_inspect 自检提供者：EditFiles.status 回报路由与调用计数', async () => {
+      const providers = collectRoutes.inspectProviders ?? [];
+      assert.equal(providers.length, 1, '应当注册一个 Host inspect provider');
+      const provider = providers[0];
+      assert.equal(provider.manifest.id, 'EditFiles');
+      assert.equal(provider.manifest.methods[0].name, 'status');
+      const snapshot = await provider.query('status', {});
+      assert.equal(snapshot.plugin, 'dsh-plugin-edit-files');
+      assert.equal(snapshot.registeredRoutes.length, 7);
+      assert.deepEqual(snapshot.registrationFailures, []);
+      assert.ok(snapshot.totalHits > 0, '自检里已经调用过路由，计数应大于 0');
+      assert.ok(snapshot.recentHits.length > 0);
+      assert.ok(snapshot.recentHits[0].route.startsWith('/api/edit-files/'));
     });
   } finally {
     await fs.rm(tmpRoot, { recursive: true, force: true }).catch(() => {});

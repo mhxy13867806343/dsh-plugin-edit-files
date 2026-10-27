@@ -370,6 +370,7 @@ window.__ModuleLoader__.load({
     /** 全局运行时：apply 里把 ctx / 打开动作挂进来，组件只读。 */
     const runtime = {
       ctx: null,
+      t: (key) => key,
       openEditor: () => {},
       openGitTab: () => {},
       notifySaved: () => {},
@@ -379,6 +380,57 @@ window.__ModuleLoader__.load({
     const gitBump = createStore(0);
     function bumpGit() {
       gitBump.set((value) => value + 1);
+    }
+
+    /** 渲染期异常：槽位里抛错会被错误边界接住，不连累别的插件，也方便自检回报。 */
+    const renderIssues = [];
+    function recordIssue(label, error) {
+      console.error(LOG + label + ' 渲染失败：', error);
+      renderIssues.push({
+        label,
+        at: new Date().toISOString(),
+        message: error && error.message ? error.message : String(error),
+      });
+      if (renderIssues.length > 20) renderIssues.shift();
+    }
+
+    /** 工作区索引：workspaceId → { path, title, sessionIds }，由无渲染桥组件持续维护。 */
+    const workspaceIndex = new Map();
+
+    /** 工作区分组菜单的 DOM 增强是否装上了，供自检回报。 */
+    let workspaceMenuBridgeActive = false;
+
+    /** 工作区菜单增强的最近事件（自检用，最多 30 条）。 */
+    const menuBridgeLog = [];
+    function logMenuBridge(entry) {
+      menuBridgeLog.push({ at: new Date().toISOString(), ...entry });
+      if (menuBridgeLog.length > 30) menuBridgeLog.shift();
+    }
+
+    /**
+     * 槽位组件错误边界：一个入口渲染炸了只让那一个入口消失，别把别人的 slot 带走。
+     * @param {{ label: string, children: any }} props
+     */
+    class SlotBoundary extends React.Component {
+      constructor(props) {
+        super(props);
+        this.state = { failed: false };
+      }
+      static getDerivedStateFromError() {
+        return { failed: true };
+      }
+      componentDidCatch(error) {
+        recordIssue(this.props.label, error);
+      }
+      render() {
+        return this.state.failed ? null : this.props.children;
+      }
+    }
+
+    function guarded(label, Component) {
+      return function GuardedEntry(props) {
+        return h(SlotBoundary, { label }, h(Component, props));
+      };
     }
 
     // ───────────────────────────────────────────────────────── 小工具
@@ -745,6 +797,570 @@ window.__ModuleLoader__.load({
       }, [path, pollMs, enabled]);
 
       return state;
+    }
+
+    // ───────────────────────────────────────────────────────── 工作区桥 / 会话行标记
+
+    /**
+     * 无渲染桥：把 useWorkspaces 的实时快照搬进模块级 workspaceIndex，
+     * 供工作区分组菜单的 DOM 增强在 React 之外按 workspaceId 找到目录路径。
+     */
+    const WorkspaceBridge = (props) => {
+      const useWorkspaces = props.useWorkspaces;
+      const snapshot = useWorkspaces((state) => state);
+      useEffect(() => {
+        workspaceIndex.clear();
+        const items = snapshot && Array.isArray(snapshot.items) ? snapshot.items : [];
+        for (const item of items) {
+          if (item === null || typeof item !== 'object' || typeof item.workspaceId !== 'string') continue;
+          workspaceIndex.set(item.workspaceId, {
+            path: typeof item.path === 'string' ? item.path : null,
+            title: typeof item.title === 'string' ? item.title : '',
+            sessionIds: Array.isArray(item.sessionIds) ? item.sessionIds.slice() : [],
+          });
+        }
+      }, [snapshot]);
+      return null;
+    };
+
+    /**
+     * 会话行 hover 按钮：该会话工作区是 git 仓库时显示 git 图标 + 改动数，
+     * 点击打开「Git 改动」页。非仓库时什么都不渲染（需求：没有 git 就不展示）。
+     */
+    const SessionRowGitAction = (props) => {
+      const t = props.t;
+      const sessionId = props.sessionId;
+      const useWorkspaces = props.useWorkspaces;
+      const path = useWorkspaces((snapshot) => workspacePathOf(snapshot, sessionId));
+      const changes = useGitChanges(path, { pollMs: 30000 });
+      const data = changes.data;
+
+      const onClick = useCallback(() => {
+        if (data === null || data === undefined || data.isRepo !== true) return;
+        runtime.openGitTab(sessionId, data.root || path || '');
+      }, [data, sessionId, path]);
+
+      if (data === null || data === undefined || data.isRepo !== true) return null;
+      const total = data.totals ? data.totals.files : Array.isArray(data.files) ? data.files.length : 0;
+      return h(
+        ToolButton,
+        {
+          title: `${translate(t, 'action.git')}${data.branch ? ` · ${data.branch}` : ''}${total > 0 ? ` · ${translate(t, 'git.files', { n: total })}` : ` · ${translate(t, 'git.clean')}`}`,
+          onClick,
+          style: { width: '18px', height: '18px', minWidth: '18px', padding: 0, gap: 0, color: total > 0 ? WARN : INK_3 },
+        },
+        h(IconGit, { size: 13 }),
+        total > 0
+          ? h('span', { style: { fontSize: '10px', lineHeight: '1', fontVariantNumeric: 'tabular-nums' } }, String(total))
+          : null,
+      );
+    };
+
+    // ───────────────────────────────────────────────────────── 工作区分组菜单（DOM 增强）
+
+    /**
+     * DSH 这一版的「工作区分组标题 ⋯ 菜单」是 ui-workspace 里写死的两项（重命名 / 删除工作区），
+     * 没有给插件留 slot。要在这张菜单里加「Git 改动」，只能在菜单打开时把一行补进它的 DOM：
+     *   · 克隆一个自带样式的原生菜单行（外观与键盘走查跟原生一致）；
+     *   · 行内容换成 git 图标 + 「Git 改动」(+ 改动数)；
+     *   · 只在该工作区确实是 git 仓库时插入（非仓库不展示）。
+     * 全程 try/catch：DSH 改版导致结构对不上时最多是这个增强失效，不影响别处。
+     */
+    const WORKSPACE_ROW = '[data-row-key^="workspace:"]';
+    const MENU_MARK = 'data-edit-files-menu';
+    const REPO_CACHE_TTL = 15000;
+    const repoCache = new Map();
+
+    const GIT_MENU_ICON =
+      '<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+      '<circle cx="4.5" cy="3.5" r="1.8"/><circle cx="4.5" cy="12.5" r="1.8"/><circle cx="11.5" cy="6.5" r="1.8"/>' +
+      '<path d="M4.5 5.3v5.4"/><path d="M9.7 6.5c-2.2 0-3.4.8-3.4 2.4"/></svg>';
+
+    /** 带缓存的仓库查询：菜单增强与会话行标记共用一次 /git/changes 的结果。 */
+    async function repoStatusOf(path) {
+      if (typeof path !== 'string' || path.length === 0) return null;
+      const cached = repoCache.get(path);
+      if (cached !== undefined && Date.now() - cached.at < REPO_CACHE_TTL) return cached.data;
+      const result = await apiGet('/git/changes', { path });
+      const data = result.ok === true ? result : null;
+      repoCache.set(path, { at: Date.now(), data });
+      if (repoCache.size > 60) {
+        const oldest = repoCache.keys().next();
+        if (oldest.done !== true) repoCache.delete(oldest.value);
+      }
+      return data;
+    }
+
+    /** 屏幕上的会话 id（有的话），用来优先在「当前会话」里打开 Git 改动页。 */
+    function onScreenSessionId() {
+      const ctx = runtime.ctx;
+      if (ctx === null || ctx.sidebarRight === undefined) return undefined;
+      try {
+        const mounted = ctx.sidebarRight.mounted;
+        const value =
+          typeof mounted === 'function'
+            ? mounted()
+            : mounted !== null && mounted !== undefined && typeof mounted.getSnapshot === 'function'
+              ? mounted.getSnapshot()
+              : mounted;
+        return typeof value === 'string' && value.length > 0 ? value : undefined;
+      } catch {
+        return undefined;
+      }
+    }
+
+    /**
+     * 装菜单增强：记录「用户刚点了哪个工作区行的 ⋯」，等菜单 portal 出现时补一行 Git 改动。
+     * @returns 卸载函数
+     */
+    function installWorkspaceMenuBridge() {
+      if (typeof document === 'undefined' || typeof MutationObserver !== 'function') return () => {};
+      let pendingToken = null;
+      let pendingAt = 0;
+
+      const onClick = (event) => {
+        try {
+          const target = event.target;
+          const row = target instanceof Element ? target.closest(WORKSPACE_ROW) : null;
+          if (row === null) {
+            pendingToken = null;
+            pendingAt = 0;
+            return;
+          }
+          const raw = row.getAttribute('data-row-key') || '';
+          pendingToken = raw.slice('workspace:'.length);
+          pendingAt = Date.now();
+          logMenuBridge({ type: 'workspace-click', token: pendingToken });
+        } catch {
+          /* 忽略 */
+        }
+      };
+
+      const addRow = (menu, data, record) => {
+        const viewport = menu.querySelector('[role="presentation"]') || menu.firstElementChild;
+        if (viewport === null) return;
+        const template = viewport.querySelector('button[role="menuitem"]');
+        if (template === null) return;
+        const wrap = template.parentElement;
+        if (wrap === null || wrap === viewport) return;
+
+        const clone = wrap.cloneNode(true);
+        clone.setAttribute(MENU_MARK, '1');
+        const button = clone.querySelector('button[role="menuitem"]');
+        if (button === null) return;
+        button.removeAttribute('aria-keyshortcuts');
+        button.removeAttribute('aria-haspopup');
+        button.removeAttribute('aria-expanded');
+        button.removeAttribute('disabled');
+
+        const slots = button.querySelectorAll(':scope > span');
+        const iconSlot = slots.length > 0 ? slots[0] : null;
+        const labelSlot = slots.length > 1 ? slots[1] : null;
+        if (iconSlot !== null) iconSlot.innerHTML = GIT_MENU_ICON;
+        if (labelSlot !== null) labelSlot.textContent = translate(runtime.t, 'action.git');
+
+        const total = data.totals && typeof data.totals.files === 'number' ? data.totals.files : 0;
+        if (total > 0) {
+          const badge = document.createElement('span');
+          badge.textContent = String(total);
+          badge.style.marginLeft = 'auto';
+          badge.style.fontSize = '11px';
+          badge.style.color = WARN;
+          badge.style.fontVariantNumeric = 'tabular-nums';
+          button.appendChild(badge);
+        }
+
+        button.addEventListener(
+          'click',
+          (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            try {
+              const list = Array.isArray(record.sessionIds) ? record.sessionIds : [];
+              const current = onScreenSessionId();
+              const target = current !== undefined && list.indexOf(current) >= 0 ? current : list.length > 0 ? list[0] : undefined;
+              runtime.openGitTab(target, data.root || record.path);
+            } catch (error) {
+              console.warn(LOG + '菜单项动作失败：', error);
+            }
+            try {
+              menu.style.display = 'none';
+            } catch {
+              /* 忽略 */
+            }
+          },
+          true,
+        );
+
+        viewport.insertBefore(clone, viewport.firstChild);
+      };
+
+      const inject = async (menu) => {
+        try {
+          if (!(menu instanceof Element) || !menu.isConnected) return;
+          if (menu.querySelector(`[${MENU_MARK}]`) !== null) return;
+          if (pendingToken === null || Date.now() - pendingAt > 1500) return;
+          const record = workspaceIndex.get(pendingToken);
+          if (record === undefined || typeof record.path !== 'string' || record.path.length === 0) {
+            logMenuBridge({ type: 'skip', reason: 'no-workspace-record', token: pendingToken });
+            return;
+          }
+          // 会话「⋯」菜单里已经有 slot 版「Git 改动」了，别重复
+          const label = translate(runtime.t, 'action.git');
+          if (typeof menu.textContent === 'string' && menu.textContent.indexOf(label) >= 0) {
+            logMenuBridge({ type: 'skip', reason: 'already-has-git-row', token: pendingToken });
+            return;
+          }
+          const data = await repoStatusOf(record.path);
+          if (data === null || data.isRepo !== true) {
+            logMenuBridge({ type: 'skip', reason: data === null ? 'git-query-failed' : 'not-a-repo', token: pendingToken, path: record.path });
+            return;
+          }
+          if (!menu.isConnected) {
+            logMenuBridge({ type: 'skip', reason: 'menu-closed', token: pendingToken });
+            return;
+          }
+          if (menu.querySelector(`[${MENU_MARK}]`) !== null) return;
+          addRow(menu, data, record);
+          logMenuBridge({ type: 'injected', token: pendingToken, path: record.path, files: data.totals ? data.totals.files : 0 });
+        } catch (error) {
+          console.warn(LOG + '工作区菜单增强失败：', error);
+          logMenuBridge({ type: 'error', message: error && error.message ? error.message : String(error) });
+        }
+      };
+
+      const observer = new MutationObserver((records) => {
+        for (const record of records) {
+          for (const node of record.addedNodes) {
+            if (!(node instanceof Element)) continue;
+            const menu = node.matches('[role="menu"]') ? node : node.querySelector('[role="menu"]');
+            if (menu === null) continue;
+            setTimeout(() => {
+              inject(menu).catch(() => {});
+            }, 0);
+          }
+        }
+      });
+
+      document.addEventListener('click', onClick, true);
+      observer.observe(document.body, { childList: true, subtree: true });
+      workspaceMenuBridgeActive = true;
+      return () => {
+        workspaceMenuBridgeActive = false;
+        document.removeEventListener('click', onClick, true);
+        observer.disconnect();
+      };
+    }
+
+    // ───────────────────────────────────────────────────────── 自检 inspect provider
+
+    /** 程序化打开编辑器浮层 → 观察 → （可选）写入保存 → 关闭。 */
+    async function editorSelfTest(input) {
+      const filePath = input !== null && typeof input === 'object' && typeof input.path === 'string' ? input.path : undefined;
+      const writeText = input !== null && typeof input === 'object' && typeof input.writeText === 'string' ? input.writeText : undefined;
+      const result = { ok: false, path: filePath, phase: null, hasPanel: false, hasTextarea: false, valueLength: 0, savePhase: null, saveError: null, readBack: null, closed: false, issues: [] };
+      if (filePath === undefined) return result;
+      editorActions.open(filePath);
+      await new Promise((resolve) => setTimeout(resolve, 700));
+      const state = editorStore.get();
+      result.phase = state.phase;
+      result.hasPanel = document.querySelector('.dsh-ef-editor') !== null;
+      const textarea = document.querySelector('textarea.dsh-ef-ta');
+      result.hasTextarea = textarea !== null;
+      result.valueLength = textarea !== null && typeof textarea.value === 'string' ? textarea.value.length : state.content.length;
+      if (writeText !== undefined && state.phase === 'ready') {
+        editorActions.setText(writeText);
+        await editorActions.save(false);
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        const after = editorStore.get();
+        result.savePhase = after.savePhase;
+        result.saveError = after.saveError;
+        const readBack = await apiPost('/file/read', { path: filePath });
+        result.readBack = readBack.ok === true ? readBack.content === writeText : false;
+      }
+      editorActions.forceClose();
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      result.closed = editorStore.get().open !== true && document.querySelector('.dsh-ef-editor') === null;
+      result.ok = result.phase === 'ready' && result.hasPanel && result.closed;
+      result.issues = renderIssues.slice(-5);
+      return result;
+    }
+
+    /** 程序化打开「Git 改动」页 → 观察正文 → 关闭，返回结果。 */
+    async function openTabSelfTest(pathHint) {
+      const ctx = runtime.ctx;
+      const result = { ok: false, sessionId: null, before: [], after: [], sawBase: false, sawFiles: false, sawSummary: false, tabIds: [], issues: [] };
+      if (ctx === null || ctx.sidebarRight === undefined) return result;
+      let sessionId = onScreenSessionId();
+      if (sessionId === undefined) {
+        for (const record of workspaceIndex.values()) {
+          if (Array.isArray(record.sessionIds) && record.sessionIds.length > 0) {
+            sessionId = record.sessionIds[0];
+            break;
+          }
+        }
+      }
+      result.sessionId = sessionId;
+      const tabsOf = (id) => {
+        try {
+          return id === undefined ? [] : ctx.sidebarRight.tabsIn(id).map((tab) => ({ id: tab.id, kind: tab.kind, title: tab.title }));
+        } catch {
+          return [];
+        }
+      };
+      result.before = tabsOf(sessionId);
+      try {
+        runtime.openGitTab(sessionId, pathHint || undefined);
+      } catch (error) {
+        result.issues.push(String(error && error.message ? error.message : error));
+        return result;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      result.after = tabsOf(sessionId);
+      const text = typeof document.body.innerText === 'string' ? document.body.innerText : '';
+      result.sawBase = text.includes('对比') || text.includes(' vs ');
+      result.sawFiles = text.includes('package.json') || text.includes('README.md') || text.includes('个文件') || text.includes(' files');
+      result.sawSummary = text.includes('origin/main');
+      result.issues = renderIssues.slice(-5);
+      // 恢复原状：把这次打开的本插件标签页关掉
+      for (const tab of result.after) {
+        if (tab.kind !== TAB_KIND || result.before.some((old) => old.id === tab.id)) continue;
+        try {
+          ctx.sidebarRight.close(tab.id);
+        } catch {
+          /* 忽略 */
+        }
+      }
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      result.ok = result.after.some((tab) => tab.kind === TAB_KIND);
+      return result;
+    }
+
+    /** 页面上与本插件相关的控件清单（只读，供 dom 自检）。 */
+    function domSnapshot() {
+      const pick = (selector) => {
+        try {
+          return [...document.querySelectorAll(selector)].map((element) => ({
+            aria: element.getAttribute('aria-label'),
+            tag: element.tagName.toLowerCase(),
+          }));
+        } catch {
+          return [];
+        }
+      };
+      return {
+        workspaceRows: (() => {
+          try {
+            return [...document.querySelectorAll(WORKSPACE_ROW)].map((row) => row.getAttribute('data-row-key'));
+          } catch {
+            return [];
+          }
+        })(),
+        workspaceIndex: [...workspaceIndex.entries()].map(([id, record]) => ({ id, path: record.path, sessions: record.sessionIds.length })),
+        gitButtons: pick('[aria-label*="Git 改动"], [aria-label*="Git changes"]'),
+        editButtons: pick('[aria-label="编辑"], [aria-label="Edit"]'),
+        openMenus: (() => {
+          try {
+            return [...document.querySelectorAll('[role="menu"]')].map((menu) => ({
+              items: [...menu.querySelectorAll('button[role="menuitem"]')].map((button) => (button.textContent || '').trim()),
+              injected: menu.querySelector(`[${MENU_MARK}]`) !== null,
+            }));
+          } catch {
+            return [];
+          }
+        })(),
+        menuBridge: { active: workspaceMenuBridgeActive, log: menuBridgeLog.slice(-20) },
+      };
+    }
+
+    /** 程序化点开「⋯」菜单 → 等待增强注入 → 关掉菜单，返回观察结果。 */
+    async function menuSelfTest(pathHint) {
+      const result = { requested: pathHint || null, workspaceId: null, trigger: null, opened: false, injected: false, menuText: null, log: [] };
+      let workspaceId = null;
+      if (typeof pathHint === 'string' && pathHint.length > 0) {
+        for (const [id, record] of workspaceIndex.entries()) {
+          if (record.path === pathHint) {
+            workspaceId = id;
+            break;
+          }
+        }
+      }
+      if (workspaceId === null) {
+        for (const [id, record] of workspaceIndex.entries()) {
+          if (typeof record.path === 'string') {
+            workspaceId = id;
+            break;
+          }
+        }
+      }
+      if (workspaceId === null) {
+        result.log = menuBridgeLog.slice(-10);
+        return result;
+      }
+      result.workspaceId = workspaceId;
+      const row = document.querySelector(`[data-row-key="workspace:${workspaceId}"]`);
+      if (row === null) {
+        result.log = menuBridgeLog.slice(-10);
+        return result;
+      }
+      const buttons = [...row.querySelectorAll('button')];
+      const trigger = buttons.length > 0 ? buttons[0] : null;
+      if (trigger === null) {
+        result.log = menuBridgeLog.slice(-10);
+        return result;
+      }
+      result.trigger = trigger.getAttribute('aria-label');
+      trigger.click();
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      const menu = document.querySelector('[role="menu"]');
+      result.opened = menu !== null;
+      if (menu !== null) {
+        result.menuText = (menu.textContent || '').trim().slice(0, 200);
+        result.injected = menu.querySelector(`[${MENU_MARK}]`) !== null;
+        // 关掉菜单：Escape 交给菜单自己的关闭逻辑
+        try {
+          document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }));
+          menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }));
+        } catch {
+          /* 忽略 */
+        }
+        await new Promise((resolve) => setTimeout(resolve, 120));
+        if (menu.isConnected) {
+          try {
+            menu.style.display = 'none';
+          } catch {
+            /* 忽略 */
+          }
+        }
+      }
+      result.log = menuBridgeLog.slice(-12);
+      return result;
+    }
+
+    /**
+     * 给 cordis_inspect 提供一个只读自检入口（client 侧）：从「当前页面」的视角请求
+     * /api/edit-files/*，回报 Host 路由是否可达、git 结果、渲染异常与工作区索引规模。
+     * 排查「按钮没出现」时不用靠猜。
+     */
+    function installInspectProvider(ctx) {
+      ctx.inject(['cordisInspect'], (inspectCtx) => {
+        const registry = inspectCtx.cordisInspect;
+        if (registry === undefined || registry === null || typeof registry.register !== 'function') return () => {};
+        return ctx.effect(
+          () =>
+            registry.register({
+              manifest: {
+                id: 'EditFiles',
+                description:
+                  'dsh-plugin-edit-files 的只读自检：从当前页面请求 /api/edit-files/*，回报 Host 路由可达性、示例路径的 git 结果与客户端渲染错误。',
+                methods: [
+                  {
+                    name: 'probe',
+                    description: '从浏览器页面视角探测插件 Host 路由与自身状态。',
+                    inputSchema: {
+                      type: 'object',
+                      properties: {
+                        path: { type: 'string', description: '可选的绝对路径，用于顺带查询 git 信息' },
+                      },
+                      additionalProperties: false,
+                    },
+                    outputSchema: { description: '探测结果：页面地址、health、git、渲染异常等。' },
+                  },
+                  {
+                    name: 'dom',
+                    description: '只读列出页面上本插件渲染出来的控件（会话头部/会话行/文件树/预览工具栏）与工作区菜单增强日志。',
+                    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+                    outputSchema: { description: 'DOM 探测结果。' },
+                  },
+                  {
+                    name: 'menuSelfTest',
+                    description: '自动化自检：程序化点开某个工作区分组的「⋯」菜单，确认 Git 改动行被补进去，然后关掉菜单。',
+                    inputSchema: {
+                      type: 'object',
+                      properties: {
+                        path: { type: 'string', description: '可选的工作区绝对路径；省略时取第一个 git 工作区' },
+                      },
+                      additionalProperties: false,
+                    },
+                    outputSchema: { description: '自检结果：是否注入、菜单文本、日志。' },
+                  },
+                  {
+                    name: 'editorSelfTest',
+                    description: '自动化自检：打开编辑器浮层读一个文件，可选写入一段文本并保存，最后关掉浮层。',
+                    inputSchema: {
+                      type: 'object',
+                      properties: {
+                        path: { type: 'string', description: '要打开的文件绝对路径' },
+                        writeText: { type: 'string', description: '可选：写入并保存这段文本（省略则只读不写）' },
+                      },
+                      required: ['path'],
+                      additionalProperties: false,
+                    },
+                    outputSchema: { description: '自检结果：浮层是否出现、保存状态、读回内容是否一致。' },
+                  },
+                  {
+                    name: 'openTabSelfTest',
+                    description: '自动化自检：短暂打开「Git 改动」右栏标签页，确认正文渲染出基准/文件列表，然后关掉标签页恢复原状。',
+                    inputSchema: {
+                      type: 'object',
+                      properties: {
+                        path: { type: 'string', description: '可选的工作区绝对路径' },
+                      },
+                      additionalProperties: false,
+                    },
+                    outputSchema: { description: '自检结果：标签页是否打开、正文关键文本、渲染异常。' },
+                  },
+                ],
+              },
+              async query(method, input) {
+                const path = input !== null && typeof input === 'object' && typeof input.path === 'string' ? input.path : undefined;
+                if (method === 'probe') {
+                  const probe = {
+                    pageUrl: typeof window !== 'undefined' && window.location ? window.location.href : null,
+                    plugin: 'dsh-plugin-edit-files',
+                    workspaceIndexSize: workspaceIndex.size,
+                    workspaceMenuBridgeActive,
+                    renderIssues: renderIssues.slice(-10),
+                    health: null,
+                    git: null,
+                  };
+                  probe.health = await apiGet('/health');
+                  if (path !== undefined) {
+                    const info = await apiGet('/git/info', { path });
+                    const changes = await apiGet('/git/changes', { path });
+                    const file = await apiGet('/git/file', { path });
+                    probe.git = {
+                      info,
+                      changes: {
+                        ok: changes.ok === true,
+                        isRepo: changes.isRepo === true,
+                        base: changes.base,
+                        totals: changes.totals,
+                        files: Array.isArray(changes.files) ? changes.files.length : 0,
+                      },
+                      file: { ok: file.ok === true, isRepo: file.isRepo === true, changed: file.file !== null && file.file !== undefined },
+                    };
+                  }
+                  return probe;
+                }
+                if (method === 'dom') {
+                  return domSnapshot();
+                }
+                if (method === 'menuSelfTest') {
+                  return await menuSelfTest(path);
+                }
+                if (method === 'openTabSelfTest') {
+                  return await openTabSelfTest(path);
+                }
+                if (method === 'editorSelfTest') {
+                  return await editorSelfTest(input);
+                }
+                throw new Error(`unknown EditFiles inspect method "${String(method)}"`);
+              },
+            }),
+          'edit-files: inspect provider',
+        );
+      });
     }
 
     // ───────────────────────────────────────────────────────── 编辑器浮层
@@ -1759,46 +2375,59 @@ window.__ModuleLoader__.load({
       apply(ctx) {
         runtime.ctx = ctx;
         const t = ctx.locale.bind(NS);
+        runtime.t = t;
 
         ctx.effect(() => ctx.locale.register(NS, { zh: ZH, en: EN }), 'edit-files: dictionaries');
         ctx.effect(() => ensureStyles(), 'edit-files: styles');
 
-        // ① 编辑器浮层
+        // ① 编辑器浮层 + 工作区快照桥（两个都是常驻的 shell.overlay 条目）
         ctx.slots.inject('shell.overlay', () =>
           ctx.slots.register(
             { name: 'shell.overlay', id: 'edit-files-editor', order: 60, locale: NS },
-            EditorOverlay,
+            guarded('editor', EditorOverlay),
+          ));
+        ctx.slots.inject('shell.overlay', () =>
+          ctx.slots.register(
+            { name: 'shell.overlay', id: 'edit-files-workspace-bridge', order: 59 },
+            guarded('workspace-bridge', WorkspaceBridge),
           ));
 
         // ② 文档预览工具栏：编辑 + Git 状态
         ctx.slots.inject('sidebar.right.tab.document.actions', () =>
           ctx.slots.register(
             { name: 'sidebar.right.tab.document.actions', id: 'edit-files-document', order: 20, locale: NS },
-            DocumentActions,
+            guarded('document-actions', DocumentActions),
           ));
 
         // ③ 文件树工具栏：Git 改动
         ctx.slots.inject('sidebar.right.tab.files.actions', () =>
           ctx.slots.register(
             { name: 'sidebar.right.tab.files.actions', id: 'edit-files-files', order: 10, locale: NS },
-            FilesGitAction,
+            guarded('files-actions', FilesGitAction),
           ));
 
         // ④ 会话头部徽标
         ctx.slots.inject('conversation.session.header.utilities', () =>
           ctx.slots.register(
             { name: 'conversation.session.header.utilities', id: 'edit-files-git-badge', order: -8, locale: NS },
-            SessionGitBadge,
+            guarded('header-badge', SessionGitBadge),
           ));
 
         // ⑤ 会话「...」菜单
         ctx.slots.inject('sidebar.workspaces.session.menu.item', () =>
           ctx.slots.register(
             { name: 'sidebar.workspaces.session.menu.item', id: 'edit-files-git-menu', order: 210, locale: NS },
-            GitMenuItem,
+            guarded('session-menu', GitMenuItem),
           ));
 
-        // ⑥ 右栏页类型 + 正文
+        // ⑥ 会话行 hover 按钮（工作区分组里每一行都能看到 git 标记）
+        ctx.slots.inject('sidebar.workspaces.session.row.action', () =>
+          ctx.slots.register(
+            { name: 'sidebar.workspaces.session.row.action', id: 'edit-files-git-row', order: 150, locale: NS },
+            guarded('session-row', SessionRowGitAction),
+          ));
+
+        // ⑦ 右栏页类型 + 正文
         ctx.effect(
           () =>
             ctx.sidebarRightTabs.register({
@@ -1812,8 +2441,14 @@ window.__ModuleLoader__.load({
         ctx.slots.inject('sidebar.right.pane.tab', () =>
           ctx.slots.register(
             { name: 'sidebar.right.pane.tab', key: TAB_ID, locale: NS },
-            GitChangesTab,
+            guarded('git-tab', GitChangesTab),
           ));
+
+        // ⑧ 工作区分组「⋯」菜单的 Git 行（DSH 没有对应 slot，走 DOM 增强）
+        ctx.effect(() => installWorkspaceMenuBridge(), 'edit-files: workspace menu bridge');
+
+        // ⑨ cordis_inspect 只读自检入口
+        installInspectProvider(ctx);
       },
     };
 
