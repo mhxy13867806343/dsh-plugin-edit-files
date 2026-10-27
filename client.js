@@ -151,6 +151,13 @@ window.__ModuleLoader__.load({
       'fm.restartConfirm': '现在重启 DSH Desktop？应用会重启，当前会话记录会保留。',
       'fm.restarting': '正在重启…',
       'fm.restartFailed': '重启请求失败，请手动重启 DSH',
+      'fm.dirUnavailable': '目录不可用',
+      'fm.workspaceMissing': '这个工作区的文件夹不存在',
+      'fm.workspaceMissingHint': '记录的路径可能已被移动或删除：',
+      'fm.recheck': '重新检测',
+      'fm.pickAnother': '换个工作区',
+      'fm.missingTag': '目录不存在',
+      'fm.currentWorkspace': '当前工作区',
 
       'err.already-exists': '目标已存在',
       'err.target-exists': '目标已存在',
@@ -283,6 +290,13 @@ window.__ModuleLoader__.load({
       'fm.restartConfirm': 'Restart DSH Desktop now? The app restarts; this Session is preserved.',
       'fm.restarting': 'Restarting…',
       'fm.restartFailed': 'Restart request failed — please restart DSH manually',
+      'fm.dirUnavailable': 'folder unavailable',
+      'fm.workspaceMissing': 'This workspace folder does not exist',
+      'fm.workspaceMissingHint': 'The recorded path may have been moved or deleted:',
+      'fm.recheck': 'Recheck',
+      'fm.pickAnother': 'Pick another workspace',
+      'fm.missingTag': 'folder missing',
+      'fm.currentWorkspace': 'Current workspace',
 
       'err.already-exists': 'Target already exists',
       'err.target-exists': 'Target already exists',
@@ -408,6 +422,9 @@ window.__ModuleLoader__.load({
 .dsh-ef-fm-row:hover .dsh-ef-fm-actions,.dsh-ef-fm-row:focus-within .dsh-ef-fm-actions{opacity:1}
 .dsh-ef-fm-input:focus{outline:2px solid var(--dsw-alias-brand-primary,#247bbf);outline-offset:-1px}
 .dsh-ef-fm-input::placeholder{color:var(--dsw-alias-label-tertiary,#71717a)}
+.dsh-ef-picker-item:hover{background:var(--dsw-alias-bg-layer-2,rgba(127,127,127,.14))}
+.dsh-ef-picker-item[data-active="1"]{background:rgba(36,123,191,.12)}
+.dsh-ef-picker-trigger:hover{background:var(--dsw-alias-bg-layer-2,rgba(127,127,127,.14))}
 `;
       document.head.appendChild(style);
       return () => {
@@ -1026,6 +1043,22 @@ window.__ModuleLoader__.load({
       return data;
     }
 
+    /** 工作区目录是否还在：打开选择器时懒校验一次，30 秒内复用。 */
+    const workspaceHealthCache = new Map();
+    async function workspaceHealthOf(path) {
+      if (typeof path !== 'string' || path.length === 0) return 'missing';
+      const cached = workspaceHealthCache.get(path);
+      if (cached !== undefined && Date.now() - cached.at < 30000) return cached.state;
+      const answer = await apiGet('/git/info', { path });
+      const state = answer.ok === true ? 'ok' : answer.reason === 'not-found' || answer.reason === 'not-directory' ? 'missing' : 'unknown';
+      workspaceHealthCache.set(path, { at: Date.now(), state });
+      if (workspaceHealthCache.size > 80) {
+        const oldest = workspaceHealthCache.keys().next();
+        if (oldest.done !== true) workspaceHealthCache.delete(oldest.value);
+      }
+      return state;
+    }
+
     /** 屏幕上的会话 id（有的话），用来优先在「当前会话」里打开 Git 改动页。 */
     function onScreenSessionId() {
       const ctx = runtime.ctx;
@@ -1309,6 +1342,104 @@ window.__ModuleLoader__.load({
       return result;
     }
 
+    /** 在「文件」页签里切工作区：选择器 → 目标工作区 → 观察 → 切回。 */
+    async function workspaceSwitchSelfTest(input) {
+      const target = input !== null && typeof input === 'object' && typeof input.path === 'string' ? input.path : '';
+      const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+      const result = { target, tabOpened: false, menuItems: [], switched: false, missingRoot: false, missingTitle: null, text: '', restored: false, issues: [] };
+      const label = translate(runtime.t, 'fm.title');
+      const tabButtons = () => {
+        try {
+          return [...document.querySelectorAll('[data-conversation-tabs] button[role="tab"]')];
+        } catch {
+          return [];
+        }
+      };
+      const clickTab = (text) => {
+        const targetButton = tabButtons().find((button) => (button.textContent || '').trim() === text);
+        if (targetButton === undefined) return false;
+        targetButton.click();
+        return true;
+      };
+      const openPicker = () => {
+        const trigger = document.querySelector('[data-ef-workspace-picker] button');
+        if (trigger === null) return false;
+        trigger.click();
+        return true;
+      };
+      const pickTrace = [];
+      const pick = async (path) => {
+        // 选择器可能已经打开了（第一次收集条目时点开过），别把它再点关
+        const hadMenu = document.querySelector('[data-workspace-path]') !== null;
+        pickTrace.push({ step: 'start', hadMenu, path });
+        if (!hadMenu) {
+          const opened = openPicker();
+          pickTrace.push({ step: 'openPicker', opened });
+          if (opened !== true) return { ok: false, trace: pickTrace };
+          await wait(350);
+        }
+        const selector = `[data-workspace-path="${path.replace(/"/gu, '\\"')}"]`;
+        const item = document.querySelector(selector);
+        pickTrace.push({ step: 'query', selector, found: item !== null, count: document.querySelectorAll('[data-workspace-path]').length });
+        if (item === null) return { ok: false, trace: pickTrace };
+        item.click();
+        pickTrace.push({ step: 'clicked' });
+        return { ok: true, trace: pickTrace };
+      };
+
+      const originalPanel = document.querySelector('[data-edit-files-panel]');
+      const originalRoot = originalPanel === null ? undefined : originalPanel.getAttribute('data-ef-root');
+      if (clickTab(label) !== true) {
+        result.issues = renderIssues.slice(-5);
+        return result;
+      }
+      result.tabOpened = true;
+      await wait(900);
+      const before = document.querySelector('[data-edit-files-panel]');
+      if (before !== null) result.originalRoot = before.getAttribute('data-ef-root');
+
+      if (openPicker() !== true) {
+        result.issues = renderIssues.slice(-5);
+        return result;
+      }
+      await wait(500);
+      result.menuItems = [...document.querySelectorAll('[data-workspace-path]')].map((item) => ({
+        path: item.getAttribute('data-workspace-path'),
+        text: (item.textContent || '').trim(),
+        active: item.getAttribute('data-active') === '1',
+        missing: (item.textContent || '').indexOf(translate(runtime.t, 'fm.missingTag')) >= 0,
+      }));
+
+      const pickOutcome = await pick(target);
+      result.debugPick = pickOutcome;
+      if (pickOutcome.ok === true) {
+        result.switched = true;
+        await wait(900);
+        const panel = document.querySelector('[data-edit-files-panel]');
+        const missingCard = panel === null ? null : panel.querySelector('[data-ef-missing-root]');
+        result.missingRoot = missingCard !== null;
+        result.missingTitle = missingCard === null ? null : (missingCard.textContent || '').trim().slice(0, 120);
+        result.text = panel === null ? '' : (panel.innerText || '').slice(0, 300);
+      }
+
+      // 切回原来的工作区
+      if (typeof result.originalRoot === 'string' && result.originalRoot.length > 0) {
+        const back = await pick(result.originalRoot);
+        result.debugRestore = back;
+        if (back.ok === true) {
+          await wait(700);
+          result.restored = document.querySelector('[data-ef-missing-root]') === null;
+        }
+      }
+      const firstTab = tabButtons()[0];
+      if (firstTab !== undefined) {
+        firstTab.click();
+        await wait(300);
+      }
+      result.issues = renderIssues.slice(-5);
+      return result;
+    }
+
     /** 切到文件面板 → 观察渲染 → 可选点文件 → 切回对话。 */
     async function panelSelfTest(input) {
       const openFile = input !== null && typeof input === 'object' && input.openFile === true;
@@ -1545,6 +1676,19 @@ window.__ModuleLoader__.load({
                     outputSchema: { description: '自检结果：每一步是否成功。' },
                   },
                   {
+                    name: 'workspaceSwitchSelfTest',
+                    description: '自动化自检：在「文件」页签里打开工作区选择器、切到指定工作区，观察列表/缺目录提示，再切回原来的工作区。',
+                    inputSchema: {
+                      type: 'object',
+                      properties: {
+                        path: { type: 'string', description: '要切过去的另一个工作区绝对路径' },
+                      },
+                      required: ['path'],
+                      additionalProperties: false,
+                    },
+                    outputSchema: { description: '自检结果：选择器条目、切换后状态、是否显示缺目录、是否切回。' },
+                  },
+                  {
                     name: 'panelSelfTest',
                     description: '自动化自检：切到「文件」主面板，确认文件列表渲染出来；可选点一个文件验证编辑浮层，然后切回对话页。',
                     inputSchema: {
@@ -1623,6 +1767,9 @@ window.__ModuleLoader__.load({
                 }
                 if (method === 'panelSelfTest') {
                   return await panelSelfTest(input);
+                }
+                if (method === 'workspaceSwitchSelfTest') {
+                  return await workspaceSwitchSelfTest(input);
                 }
                 if (method === 'editorSelfTest') {
                   return await editorSelfTest(input);
@@ -2792,6 +2939,8 @@ window.__ModuleLoader__.load({
     const IconSortUp = (props) => svg(props, [h('path', { key: 'a', d: 'M8 13V3M4.5 6.5L8 3l3.5 3.5' })]);
     const IconPencil = (props) =>
       svg(props, [h('path', { key: 'a', d: 'M10.5 2.5l3 3L5 14H2v-3l8.5-8.5z' }), h('path', { key: 'b', d: 'M9 4l3 3' })]);
+    const IconChevronDown = (props) => svg({ size: props && props.size ? props.size : 10 }, [h('path', { key: 'a', d: 'M4 6l4 4 4-4' })]);
+    const IconCheck = (props) => svg({ size: props && props.size ? props.size : 12 }, [h('path', { key: 'a', d: 'M3 8.5l3.5 3.5L13 4.5' })]);
 
     /** 一个文件/目录行的图标。 */
     function entryIcon(entry) {
@@ -2972,6 +3121,8 @@ window.__ModuleLoader__.load({
       const [dialogBusy, setDialogBusy] = useState(false);
       const [notice, setNotice] = useState(null);
       const [restartPhase, setRestartPhase] = useState('idle');
+      const [pickerOpen, setPickerOpen] = useState(false);
+      const [workspaceHealth, setWorkspaceHealth] = useState(() => new Map());
 
       // 工作区：优先用持久化的；否则跟当前会话走；再不行取第一个。
       useEffect(() => {
@@ -2984,12 +3135,51 @@ window.__ModuleLoader__.load({
         storeRoot(root);
       }, [root]);
 
-      // 切工作区时回到根目录
+      // 切工作区时回到根目录，并收起选择器
       useEffect(() => {
         setCwd('');
         setQuery('');
         setSelection(null);
+        setPickerOpen(false);
       }, [root]);
+
+      // 选择器打开时：点外面关掉、Esc 关掉
+      useEffect(() => {
+        if (!pickerOpen) return undefined;
+        const onPointerDown = (event) => {
+          const target = event.target;
+          if (target instanceof Element && target.closest('[data-ef-workspace-picker]') !== null) return;
+          setPickerOpen(false);
+        };
+        const onKeyDown = (event) => {
+          if (event.key === 'Escape') setPickerOpen(false);
+        };
+        document.addEventListener('pointerdown', onPointerDown, true);
+        document.addEventListener('keydown', onKeyDown, true);
+        return () => {
+          document.removeEventListener('pointerdown', onPointerDown, true);
+          document.removeEventListener('keydown', onKeyDown, true);
+        };
+      }, [pickerOpen]);
+
+      // 打开选择器时懒校验各工作区目录是否还在（标出「目录不存在」）
+      useEffect(() => {
+        if (!pickerOpen || workspaceList.length === 0) return undefined;
+        let live = true;
+        Promise.all(
+          workspaceList.map(async (item) => [item.path, await workspaceHealthOf(item.path)]),
+        ).then((pairs) => {
+          if (!live) return;
+          setWorkspaceHealth((previous) => {
+            const next = new Map(previous);
+            for (const [path, state] of pairs) next.set(path, state);
+            return next;
+          });
+        });
+        return () => {
+          live = false;
+        };
+      }, [pickerOpen, workspaceList]);
 
       // 取目录树 + git 改动（同一个 root）
       useEffect(() => {
@@ -3166,6 +3356,113 @@ window.__ModuleLoader__.load({
         }
       };
 
+      const selectedWorkspaceTitle = (() => {
+        const match = workspaceList.find((item) => item.path === root);
+        if (match !== undefined) return match.title;
+        return basename(root) || root || translate(t, 'fm.noWorkspace');
+      })();
+
+      const workspacePicker = h(
+        'div',
+        { 'data-ef-workspace-picker': '1', style: { position: 'relative', display: 'flex', alignItems: 'center', minWidth: 0 } },
+        h(
+          'button',
+          {
+            type: 'button',
+            className: 'dsh-ef-btn dsh-ef-picker-trigger',
+            title: `${translate(t, 'fm.pickWorkspace')} · ${root}`,
+            'aria-haspopup': 'menu',
+            'aria-expanded': pickerOpen === true ? 'true' : 'false',
+            onClick: () => setPickerOpen((value) => !value),
+            style: {
+              ...S.btn,
+              height: '30px',
+              maxWidth: '340px',
+              padding: '0 9px',
+              gap: '6px',
+              borderRadius: '8px',
+              border: `0.5px solid ${LINE_2}`,
+              background: BG_1,
+              color: INK,
+              fontSize: '12.5px',
+            },
+          },
+          h('span', { style: { display: 'flex', color: BRAND } }, h(IconFolder, { size: 14 })),
+          h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, selectedWorkspaceTitle),
+          h('span', { style: { display: 'flex', color: INK_3 } }, h(IconChevronDown, { size: 10 })),
+        ),
+        pickerOpen === true
+          ? h(
+              'div',
+              {
+                role: 'menu',
+                style: {
+                  position: 'absolute',
+                  top: 'calc(100% + 6px)',
+                  left: 0,
+                  zIndex: 2600,
+                  width: '360px',
+                  maxWidth: 'calc(100vw - 64px)',
+                  maxHeight: '340px',
+                  overflowY: 'auto',
+                  padding: '5px',
+                  borderRadius: '10px',
+                  border: `0.5px solid ${LINE_2}`,
+                  background: BG_OVER,
+                  boxShadow: '0 16px 40px rgba(0,0,0,.36)',
+                },
+              },
+              h('div', { style: { padding: '4px 8px 6px', fontSize: '11px', color: INK_3 } }, translate(t, 'fm.pickWorkspace')),
+              workspaceList.map((item) => {
+                const selected = item.path === root;
+                const health = workspaceHealth.get(item.path) || 'unknown';
+                return h(
+                  'button',
+                  {
+                    key: item.workspaceId,
+                    type: 'button',
+                    role: 'menuitemradio',
+                    'aria-checked': selected === true ? 'true' : 'false',
+                    'data-workspace-path': item.path,
+                    className: 'dsh-ef-picker-item',
+                    'data-active': selected ? '1' : undefined,
+                    onClick: () => {
+                      setPickerOpen(false);
+                      if (item.path !== root) setRoot(item.path);
+                    },
+                    style: {
+                      width: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '7px 8px',
+                      border: 0,
+                      borderRadius: '7px',
+                      background: 'transparent',
+                      color: selected ? INK : INK_2,
+                      font: 'inherit',
+                      fontSize: '12.5px',
+                      textAlign: 'left',
+                      cursor: 'pointer',
+                    },
+                  },
+                  h('span', { style: { flex: 'none', display: 'flex', color: health === 'missing' ? WARN : BRAND } }, h(IconFolder, { size: 14 })),
+                  h(
+                    'span',
+                    { style: { flex: '1 1 auto', minWidth: 0, display: 'flex', flexDirection: 'column', gap: '1px' } },
+                    h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: selected ? 600 : 400 } }, item.title),
+                    h('span', { style: { ...S.mono, fontSize: '10.5px', color: INK_3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, shortPath(item.path, 52)),
+                  ),
+                  health === 'missing'
+                    ? h('span', { style: { ...S.chip, flex: 'none', color: WARN, borderColor: 'transparent', background: 'rgba(210,153,34,.14)' } }, translate(t, 'fm.missingTag'))
+                    : null,
+                  selected ? h('span', { style: { flex: 'none', display: 'flex', color: BRAND } }, h(IconCheck, { size: 13 })) : null,
+                );
+              }),
+            )
+          : null,
+      );
+
       const header = h(
         'div',
         {
@@ -3183,32 +3480,14 @@ window.__ModuleLoader__.load({
           { style: { display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' } },
           h('span', { style: { color: BRAND, display: 'flex' } }, h(IconFolder, { size: 20 })),
           h('span', { style: { fontSize: '16px', fontWeight: 600 } }, translate(t, 'fm.title')),
-          workspaceList.length > 1
-            ? h(
-                'select',
-                {
-                  value: root,
-                  onChange: (event) => setRoot(event.target.value),
-                  title: translate(t, 'fm.pickWorkspace'),
-                  style: {
-                    font: 'inherit',
-                    fontSize: '12.5px',
-                    padding: '4px 8px',
-                    borderRadius: '6px',
-                    border: `0.5px solid ${LINE_2}`,
-                    background: BG_1,
-                    color: INK,
-                    maxWidth: '300px',
-                  },
-                },
-                workspaceList.map((item) => h('option', { key: item.workspaceId, value: item.path }, item.title)),
-                root.length > 0 && !workspaceList.some((item) => item.path === root) ? h('option', { key: 'custom', value: root }, basename(root)) : null,
-              )
-            : null,
+          workspacePicker,
           h('span', { style: { flex: '1 1 auto' } }),
           changedTotal > 0
             ? h('span', { style: { ...S.chip, color: WARN, borderColor: 'transparent', background: 'rgba(210,153,34,.14)' } }, translate(t, 'fm.changed', { n: changedTotal }))
-            : h('span', { style: { ...S.chip, color: OK, borderColor: 'transparent', background: 'rgba(63,185,80,.12)' } }, `✓ ${translate(t, 'fm.clean')}`),
+            : changes !== null
+              // 目录本身读不到时不要假装「与远程一致」
+              ? h('span', { style: { ...S.chip, color: tree.error === null ? OK : INK_3, borderColor: 'transparent', background: tree.error === null ? 'rgba(63,185,80,.12)' : 'rgba(127,127,127,.10)' } }, tree.error === null ? `✓ ${translate(t, 'fm.clean')}` : translate(t, 'fm.dirUnavailable'))
+              : null,
           h(ToolButton, { title: translate(t, 'fm.refresh'), onClick: refresh, children: h(IconRefresh, {}) }),
         ),
         h(
@@ -3378,19 +3657,53 @@ window.__ModuleLoader__.load({
       } else if (tree.loading && tree.data === null) {
         body.push(h('div', { key: 'loading', style: { padding: '26px 24px', fontSize: '13px', color: INK_3 } }, translate(t, 'fm.loading')));
       } else if (tree.error !== null) {
+        const missingRoot = tree.error.reason === 'not-found' || tree.error.reason === 'not-directory';
         body.push(
           h(
             'div',
-            { key: 'error', style: { padding: '26px 24px', display: 'flex', flexDirection: 'column', gap: '10px' } },
+            { key: 'error', style: { padding: '26px 24px', display: 'flex', flexDirection: 'column', gap: '12px', maxWidth: '760px' } },
+            // 失败时也把「选中的那个文件夹」按选择器的样式摆出来，让人知道自己在看哪儿
+            missingRoot
+              ? h(
+                  'div',
+                  {
+                    'data-ef-missing-root': '1',
+                    style: {
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                      padding: '10px 12px',
+                      borderRadius: '9px',
+                      border: `0.5px solid ${LINE_2}`,
+                      background: BG_1,
+                      maxWidth: '520px',
+                    },
+                  },
+                  h('span', { style: { display: 'flex', color: WARN } }, h(IconFolder, { size: 18 })),
+                  h(
+                    'span',
+                    { style: { display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 } },
+                    h('span', { style: { fontSize: '13px', fontWeight: 600, color: INK } }, selectedWorkspaceTitle),
+                    h('span', { style: { ...S.mono, color: INK_3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }, title: root }, root),
+                  ),
+                )
+              : null,
             staleHost
               ? h('div', { style: { fontSize: '13px', color: WARN, fontWeight: 600 } }, translate(t, 'fm.restartNeeded'))
-              : h('div', { style: { fontSize: '13px', color: ERROR } }, reasonText(t, tree.error.reason, tree.error)),
+              : h(
+                  'div',
+                  { style: { fontSize: '13px', color: missingRoot ? INK : ERROR, fontWeight: missingRoot ? 600 : 400 } },
+                  missingRoot ? translate(t, 'fm.workspaceMissing') : reasonText(t, tree.error.reason, tree.error),
+                ),
+            missingRoot
+              ? h('div', { style: { fontSize: '12px', color: INK_3, lineHeight: 1.7 } }, translate(t, 'fm.workspaceMissingHint'))
+              : null,
             staleHost
               ? h('div', { style: { fontSize: '12px', color: INK_3, maxWidth: '720px', lineHeight: 1.7 } }, translate(t, 'fm.restartHint'))
               : null,
             h(
               'div',
-              { style: { display: 'flex', gap: '8px', alignItems: 'center' } },
+              { style: { display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' } },
               h(
                 'button',
                 {
@@ -3399,8 +3712,20 @@ window.__ModuleLoader__.load({
                   onClick: refresh,
                   style: { ...S.btn, border: `0.5px solid ${LINE_2}`, height: '28px', padding: '0 12px' },
                 },
-                translate(t, 'action.retry'),
+                translate(t, missingRoot ? 'fm.recheck' : 'action.retry'),
               ),
+              missingRoot
+                ? h(
+                    'button',
+                    {
+                      type: 'button',
+                      className: 'dsh-ef-btn',
+                      onClick: () => setPickerOpen(true),
+                      style: { ...S.btn, height: '28px', padding: '0 12px', border: `0.5px solid ${LINE_2}` },
+                    },
+                    translate(t, 'fm.pickAnother'),
+                  )
+                : null,
               staleHost
                 ? h(
                     'button',
@@ -3533,7 +3858,7 @@ window.__ModuleLoader__.load({
 
       return h(
         'div',
-        { 'data-edit-files-panel': '1', style: { display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, color: INK, background: 'var(--dsw-alias-bg-base, #17181c)' } },
+        { 'data-edit-files-panel': '1', 'data-ef-root': root, style: { display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, color: INK, background: 'var(--dsw-alias-bg-base, #17181c)' } },
         header,
         body.length > 0 ? body[0] : null,
         body.length > 1 ? body[1] : null,
