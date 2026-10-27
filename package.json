@@ -28,7 +28,8 @@
     "locale/*.json",
     "icon.svg",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "assets"
   ],
   "meta": {
     "title": "文件编辑 & Git 改动",
