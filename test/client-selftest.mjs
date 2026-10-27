@@ -141,7 +141,12 @@ function makeCtx() {
         return () => {};
       },
       bind(namespace) {
-        return (key) => `${namespace}:${key}`;
+        // 与应用一样按命名空间查表；表在 apply 期间才注册，所以这里延迟到调用时再读。
+        return (key) => {
+          const entry = localeRegisters.find((item) => item.namespace === namespace);
+          const dict = entry && entry.dictionaries.zh;
+          return dict !== undefined && typeof dict[key] === 'string' ? dict[key] : key;
+        };
       },
     },
     slots: {
@@ -226,7 +231,7 @@ check('client.js 里 translate() 用到的 key 都能在字典里找到', () => 
   assert.deepEqual(missing, [], `缺 key: ${missing.join(', ')}`);
 });
 
-check('注册了十个 slot 入口（含文件面板）', () => {
+check('注册了九个 slot 入口（含「文件」会话页签）', () => {
   const seen = registrations.map((item) => `${item.options.name}#${item.options.id || item.options.key || ''}`);
   for (const expected of [
     'shell.overlay#edit-files-editor',
@@ -237,22 +242,20 @@ check('注册了十个 slot 入口（含文件面板）', () => {
     'sidebar.workspaces.session.menu.item#edit-files-git-menu',
     'sidebar.workspaces.session.row.action#edit-files-git-row',
     'sidebar.right.pane.tab#dsh-plugin-edit-files/git',
-    'main#edit-files-browser',
-    'sidebar.panellist#edit-files-browser',
+    'conversation.view#edit-files-files',
   ]) {
     assert.ok(seen.indexOf(expected) >= 0, `缺注册：${expected}；实际：${seen.join(', ')}`);
   }
 });
 
-check('文件面板的 pane 图标带 label，主面板用同一个 key', () => {
-  const panel = registrations.find((item) => item.options.name === 'sidebar.panellist' && item.options.id === 'edit-files-browser');
-  assert.ok(panel, '缺 sidebar.panellist 注册');
-  assert.equal(typeof panel.options.label, 'function');
-  assert.equal(typeof panel.options.label(), 'string');
-  assert.equal(typeof panel.Component, 'function');
-  const main = registrations.find((item) => item.options.name === 'main');
-  assert.ok(main, '缺 main 注册');
-  assert.equal(main.options.key, panel.options.id);
+check('「文件」页签注册在 conversation.view，label 是「文件」', () => {
+  const view = registrations.find((item) => item.options.name === 'conversation.view');
+  assert.ok(view, '缺 conversation.view 注册');
+  assert.equal(view.options.id, 'edit-files-files');
+  assert.equal(typeof view.options.label, 'function');
+  assert.equal(view.options.label(), '文件');
+  assert.equal(view.options.order, 20);
+  assert.equal(typeof view.Component, 'function');
 });
 
 check('没有 locale 的槽位用 id 注册（工作区快照桥）', () => {
@@ -298,10 +301,9 @@ check('样式只注入一次（重复 apply 不会叠两份）', () => {
 check('slot inject 的等待顺序覆盖全部入口', () => {
   assert.deepEqual(injectedSlots.sort(), [
     'conversation.session.header.utilities',
-    'main',
+    'conversation.view',
     'shell.overlay',
     'shell.overlay',
-    'sidebar.panellist',
     'sidebar.right.pane.tab',
     'sidebar.right.tab.document.actions',
     'sidebar.right.tab.files.actions',

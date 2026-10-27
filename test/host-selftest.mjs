@@ -238,7 +238,7 @@ async function main() {
       assert.equal(headers.get('cache-control'), 'no-store');
       assert.equal(data.ok, true);
       assert.equal(data.name, 'dsh-plugin-edit-files');
-      assert.equal(data.version, '0.1.0');
+      assert.equal(data.version, '0.2.0');
       assert.deepEqual(data.routes, [
         `${API}/health`,
         `${API}/git/info`,

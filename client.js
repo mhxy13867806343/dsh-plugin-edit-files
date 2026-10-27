@@ -1312,19 +1312,35 @@ window.__ModuleLoader__.load({
     /** 切到文件面板 → 观察渲染 → 可选点文件 → 切回对话。 */
     async function panelSelfTest(input) {
       const openFile = input !== null && typeof input === 'object' && input.openFile === true;
-      const ctx = runtime.ctx;
-      const result = { switched: false, rendered: false, rows: 0, searchInput: false, clickedFile: null, editorOpened: false, restored: false, issues: [], text: '' };
-      // layout 没写进插件 inject（只在这个自检里用），用 get 拿，不阻塞正常加载。
-      const layout = ctx === null ? undefined : typeof ctx.get === 'function' ? ctx.get('layout') : ctx.layout;
-      if (layout === undefined || layout === null || typeof layout.selectPanel !== 'function') return result;
-      try {
-        layout.selectPanel(PANEL_ID);
-        result.switched = true;
-      } catch (error) {
-        result.issues.push(String(error && error.message ? error.message : error));
+      const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+      const result = { tabFound: false, switched: false, rendered: false, rows: 0, searchInput: false, clickedFile: null, editorOpened: false, restored: false, issues: [], text: '', tabs: [] };
+      const label = translate(runtime.t, 'fm.title');
+
+      const tabButtons = () => {
+        try {
+          const tablist = document.querySelector('[data-conversation-tabs]');
+          if (tablist === null) return [];
+          return [...tablist.querySelectorAll('button[role="tab"]')];
+        } catch {
+          return [];
+        }
+      };
+      const readTabs = () => tabButtons().map((button) => ({ label: (button.textContent || '').trim(), selected: button.getAttribute('aria-selected') === 'true' }));
+      const clickTab = (text) => {
+        const target = tabButtons().find((button) => (button.textContent || '').trim() === text);
+        if (target === undefined) return false;
+        target.click();
+        return true;
+      };
+
+      result.tabs = readTabs();
+      result.tabFound = result.tabs.some((tab) => tab.label === label);
+      if (!result.tabFound || clickTab(label) !== true) {
+        result.issues = renderIssues.slice(-5);
         return result;
       }
-      await new Promise((resolve) => setTimeout(resolve, 1200));
+      result.switched = true;
+      await wait(1200);
       const panel = document.querySelector('[data-edit-files-panel]');
       result.rendered = panel !== null;
       if (panel !== null) {
@@ -1332,23 +1348,22 @@ window.__ModuleLoader__.load({
         result.searchInput = panel.querySelector('input.dsh-ef-fm-input') !== null;
         result.text = (panel.innerText || '').slice(0, 400);
         if (openFile) {
-          const row = panel.querySelector('.dsh-ef-fm-row');
+          const row = panel.querySelector('.dsh-ef-fm-row[data-entry-type="file"]') || panel.querySelector('.dsh-ef-fm-row');
           if (row !== null) {
             result.clickedFile = row.getAttribute('title');
             row.click();
-            await new Promise((resolve) => setTimeout(resolve, 900));
+            await wait(900);
             result.editorOpened = document.querySelector('.dsh-ef-editor') !== null;
             editorActions.forceClose();
-            await new Promise((resolve) => setTimeout(resolve, 250));
+            await wait(250);
           }
         }
       }
-      try {
-        layout.selectPanel('conversation');
-        await new Promise((resolve) => setTimeout(resolve, 300));
+      // 切回第一个页签（对话），恢复原状
+      const first = readTabs()[0];
+      if (first !== undefined && clickTab(first.label) === true) {
+        await wait(350);
         result.restored = document.querySelector('[data-edit-files-panel]') === null;
-      } catch {
-        /* 忽略 */
       }
       result.issues = renderIssues.slice(-5);
       return result;
@@ -2627,8 +2642,8 @@ window.__ModuleLoader__.load({
 
     // ───────────────────────────────────────────────────────── 工程文件面板（主面板）
 
-    /** 主面板 id：同时用于 `main`（keyed）与 `sidebar.panellist`（id）两个注册。 */
-    const PANEL_ID = 'edit-files-browser';
+    /** 会话视图页签 id：注册在 `conversation.view`，和「对话」「轨迹」并排。 */
+    const VIEW_ID = 'edit-files-files';
     const ROOT_STORAGE_KEY = 'dsh-edit-files.root';
 
     function readStoredRoot() {
@@ -2756,11 +2771,6 @@ window.__ModuleLoader__.load({
 
     const IconFolder = (props) =>
       svg(props, [h('path', { key: 'a', d: 'M2 4.2h4.1l1.3 1.8H14v7.2a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V4.2z' })]);
-    const IconFolderOpen = (props) =>
-      svg(props, [
-        h('path', { key: 'a', d: 'M2 4.2h4.1l1.3 1.8H14v1.4H5.3L3.6 13H2V4.2z' }),
-        h('path', { key: 'b', d: 'M5.3 7.4h9.2L12.8 13H2.9l2.4-5.6z' }),
-      ]);
     const IconLinkFile = (props) =>
       svg(props, [
         h('path', { key: 'a', d: 'M6.2 9.8a2.6 2.6 0 0 1 0-3.7l1.6-1.6' }),
@@ -2782,9 +2792,6 @@ window.__ModuleLoader__.load({
     const IconSortUp = (props) => svg(props, [h('path', { key: 'a', d: 'M8 13V3M4.5 6.5L8 3l3.5 3.5' })]);
     const IconPencil = (props) =>
       svg(props, [h('path', { key: 'a', d: 'M10.5 2.5l3 3L5 14H2v-3l8.5-8.5z' }), h('path', { key: 'b', d: 'M9 4l3 3' })]);
-
-    /** 左栏面板图标。 */
-    const FileManagerIcon = (props) => h(IconFolder, { size: props.size || 18 });
 
     /** 一个文件/目录行的图标。 */
     function entryIcon(entry) {
@@ -2942,16 +2949,13 @@ window.__ModuleLoader__.load({
       const t = props.t;
       const useWorkspaces = props.useWorkspaces;
       const useSessions = props.useSessions;
-      const usePanelInfo = props.usePanelInfo;
       const workspaces = useWorkspaces((snapshot) => snapshot);
       const sessions = useSessions((snapshot) => snapshot);
-      const panelInfo = usePanelInfo((snapshot) => snapshot);
       const bump = useStoreValue(gitBump, (value) => value);
 
       const workspaceList = useMemo(() => workspaceListOf(workspaces), [workspaces]);
       const currentSessionId = useMemo(() => currentSessionIdOf(sessions), [sessions]);
       const currentWorkspacePath = useMemo(() => workspacePathOf(workspaces, currentSessionId), [workspaces, currentSessionId]);
-      const active = Boolean(panelInfo && panelInfo.activePanelId === PANEL_ID);
 
       const [root, setRoot] = useState(() => readStoredRoot());
       const [tree, setTree] = useState({ loading: false, data: null, error: null });
@@ -3012,12 +3016,15 @@ window.__ModuleLoader__.load({
         };
       }, [root, includeIgnored, refreshSeq, bump]);
 
-      // 面板在前台时每 10 秒静默刷新，文件/外部改动都能跟上
+      // 这个页签只在被选中时渲染，所以挂载期间每 10 秒静默刷新即可跟上外部改动
       useEffect(() => {
-        if (!active || typeof root !== 'string' || root.length === 0) return undefined;
-        const timer = setInterval(() => setRefreshSeq((value) => value + 1), 10000);
+        if (typeof root !== 'string' || root.length === 0) return undefined;
+        const timer = setInterval(() => {
+          if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+          setRefreshSeq((value) => value + 1);
+        }, 10000);
         return () => clearInterval(timer);
-      }, [active, root]);
+      }, [root]);
 
       // 提示两秒后自己消失
       useEffect(() => {
@@ -3432,6 +3439,7 @@ window.__ModuleLoader__.load({
                   key: entry.rel,
                   className: 'dsh-ef-fm-row',
                   'data-selected': selection === entry.rel ? '1' : undefined,
+                  'data-entry-type': entry.type,
                   role: 'button',
                   tabIndex: 0,
                   title: rootPathOf(root, entry.rel),
@@ -3623,16 +3631,17 @@ window.__ModuleLoader__.load({
         // ⑨ cordis_inspect 只读自检入口
         installInspectProvider(ctx);
 
-        // ⑩ 工程文件面板：左栏图标 + 主面板页
-        ctx.slots.inject('main', () =>
+        // ⑩ 工程文件页签：注册在对话页签条上（「对话 / 轨迹 / 文件」）
+        ctx.slots.inject('conversation.view', () =>
           ctx.slots.register(
-            { name: 'main', key: PANEL_ID, locale: NS },
+            {
+              name: 'conversation.view',
+              id: VIEW_ID,
+              order: 20,
+              locale: NS,
+              label: () => translate(t, 'fm.title'),
+            },
             guarded('file-manager', FileManagerPage),
-          ));
-        ctx.slots.inject('sidebar.panellist', () =>
-          ctx.slots.register(
-            { name: 'sidebar.panellist', id: PANEL_ID, order: 30, locale: NS, label: () => translate(t, 'fm.title') },
-            guarded('file-manager-icon', FileManagerIcon),
           ));
       },
     };
@@ -3640,7 +3649,7 @@ window.__ModuleLoader__.load({
     // 自检脚本（test/client-selftest.mjs）用：只有页面显式打开测试开关时才挂，正常运行时不存在。
     if (typeof window !== 'undefined' && window.__DSH_EDIT_FILES_TEST__ === true) {
       plugin.__test = {
-        constants: { NS, API, TAB_ID, TAB_KIND, PANEL_ID },
+        constants: { NS, API, TAB_ID, TAB_KIND, VIEW_ID },
         dictionaries: { zh: ZH, en: EN },
         translate,
         parseUnifiedDiff,
