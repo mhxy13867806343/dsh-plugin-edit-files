@@ -31,6 +31,18 @@
 - 顶部顺带显示分支、相对上游的领先 / 落后提交数；没有上游时依次退回 `origin/HEAD`、`HEAD`（此时会写明「对比 HEAD」）；空仓库把所有文件当未跟踪列出。
 - 列表为空时显示「与远程一致，没有本地改动」。
 
+### 三、文件面板（当前项目的所有文件）
+
+左栏多一个「文件」图标，点开是当前项目（会话所在工作区）的完整文件面板：
+
+- **浏览**：默认递归列出工作区里的文件与目录；点目录进入、面包屑回退；默认跳过 `node_modules` / `dist` / `.git` 这类重目录，工具栏可切「显示忽略目录」（`.git` 永远不列）。
+- **搜索**：模糊匹配（子序列），输入 `mnts` 也能找到 `main.ts`；大小写无关，基名命中的排前面。
+- **排序**：名称 / 修改时间 / 大小，升序或降序；目录始终排在文件前面。
+- **操作**：点文件直接在编辑器里打开（可改可存）；「新建文件 / 新建文件夹」建在当前目录里；每行 hover 出「重命名 / 删除」，删除目录需要显式勾选递归确认。
+- **Git 同步**：每行右侧显示该文件相对远程的状态字母（M/A/D/R…），顶部显示「N 个文件有改动」；面板在前台时每 10 秒静默刷新，增删改与保存后立刻重读文件树和 git 状态，所以「文件变了，git 也跟着变」。
+- 多个工作区时，顶部下拉可以直接切换要浏览的工作区；选择会记住（localStorage）。
+- 首次安装 / 升级 Host 代码后需要重启一次 DSH（理由见「安装」一节）；面板检测到旧 Host 时会直接显示「重启 DSH」按钮。
+
 ## 安装
 
 前置条件：DSH Desktop 或 `dsh web`（带 Web GUI 的 profile）；Node.js ≥ 22.13.0（`package.json` 的 `engines` 要求）；要用 Git 改动功能的话，本机要有 `git`。插件没有 npm 依赖，**不需要 `npm install`**。
@@ -45,7 +57,9 @@ plugin_manager({ action: "install_bundle", target: "/绝对路径/dsh-plugin-edi
 
 安装会把包装进当前 profile 并登记 bundle，插件列表里出现 `dsh-plugin-edit-files`；如果显示为关闭，打开开关即可。
 
-**装完请刷新一次 DSH Web 页面**（⌘R / Ctrl+R，重新加载标签页）：Host 路由随插件启用就生效，但 `client.js` 是页面加载时注入的客户端代码，不刷新看不到预览工具栏的「编辑」按钮和 Git 入口。如果是**覆盖安装**已存在的同名插件，还需要重启 DSH 才会加载新的客户端模块。
+**装完请重启一次 DSH Desktop**（菜单里退出再打开即可，会话记录会保留）：Host 侧插件模块在进程里是缓存的，**升级/新增 Host 路由后，运行中的进程仍会跑旧模块**；客户端代码会热更新，但 Host 新路由不会。重启一次性解决客户端与 Host 两边。
+
+如果暂时不想重启：打开左栏「文件」面板时，如果检测到 Host 路由还是旧的（404），面板会直接给出「重启 DSH」按钮，点一下就会走 Desktop 自己的有序重启，会话记录同样保留。
 
 ### 方式二：从插件市场安装
 
@@ -69,6 +83,14 @@ plugin_manager({ action: "install_bundle", target: "/绝对路径/dsh-plugin-edi
 4. 点一个文件看 unified diff；面板开着时每 6 秒自动刷新，也可以手动刷新。
 5. 把文件改回与远程一致，它会自动从列表里消失；全部一致时显示「与远程一致，没有本地改动」。如果会话还没有工作区路径，页面会提示「这个会话还没有工作区路径」。
 
+### 在文件面板里管理文件
+
+1. 左栏点「文件」图标；面板默认打开当前会话所在工作区（多工作区时顶部可切换）。
+2. 搜索框输入片段做模糊匹配；右侧下拉切排序方式，箭头切升降序；「只看改动」只列相对远程有变化的文件。
+3. 点文件 → 编辑器浮层打开（⌘S 保存）；点目录 → 进入；建文件 / 文件夹 / 重命名 / 删除都在当前目录里进行。
+4. 增删改与保存后文件树和 git 状态会自动重读；面板在前台时每 10 秒也会静默刷新一次。
+5. 如果面板显示「需要重启一次 DSH Desktop」，点面板里的「重启 DSH」按钮即可（Host 新路由要重启进程才加载）。
+
 ## Host 路由（`/api/edit-files/*`）
 
 所有响应都是 JSON（`cache-control: no-store`）；失败统一返回 `{ ok: false, reason, error? }` + 合适的 HTTP 状态码，不会把异常抛到路由之外。GET 从 query 取参数，POST 从 JSON body 取参数。
@@ -82,6 +104,10 @@ plugin_manager({ action: "install_bundle", target: "/绝对路径/dsh-plugin-edi
 | GET | `/api/edit-files/git/file` | 单个文件是否与远程不同，供预览工具栏 / 会话徽标判断（`?path=`） |
 | POST | `/api/edit-files/file/read` | 读 UTF-8 文本：内容、大小、mtime、换行符、BOM、权限位 |
 | POST | `/api/edit-files/file/write` | 写文件：乐观并发检查、原子写、保留 EOL / BOM / 权限位 |
+| GET | `/api/edit-files/files/tree` | 递归列出一个目录下的文件与目录（可含忽略目录），带大小与修改时间（`?root=&includeIgnored=&limit=`） |
+| POST | `/api/edit-files/files/create` | 新建文件或目录（`{root, rel, kind, content?}`） |
+| POST | `/api/edit-files/files/rename` | 重命名 / 移动到工作区内的另一个路径（`{root, from, to}`） |
+| POST | `/api/edit-files/files/delete` | 删除文件；目录需 `recursive:true`（`{root, rel, recursive?}`） |
 
 参数、状态码、基准选择规则与返回字段以契约文档为准：[`docs/route-contract.md`](docs/route-contract.md)。
 
@@ -94,6 +120,8 @@ plugin_manager({ action: "install_bundle", target: "/绝对路径/dsh-plugin-edi
 | `maxFileBytes` | `2097152`（2 MiB） | 单个文件读取 / 保存上限（字节），超过就拒绝读写 |
 | `maxDiffLines` | `4000` | 单个文件 diff 最多回传行数，超出截断并标 `truncated` |
 | `maxChangedFiles` | `3000` | 一次改动列表最多回传条数，超出截断并标 `truncated` |
+| `maxTreeEntries` | `20000` | 文件面板一次最多列多少条（目录 + 文件） |
+| `treeIgnores` | 见 `lib/config.js` | 文件面板默认跳过的目录名（可切「显示忽略目录」看到） |
 
 改的是 profile 里这个 bundle 的 patch 配置（或安装前改仓库里的 `cordis.patch.yml`）。`cordis.patch.example.yml` 只是把可调项抄出来给人看的参考，改它不会生效。
 
@@ -104,7 +132,8 @@ plugin_manager({ action: "install_bundle", target: "/绝对路径/dsh-plugin-edi
 - **不是 IDE**：没有语法高亮、补全、LSP、多光标；改大文件请用真正的编辑器。
 - **不自动合并冲突**：保存时发现外部改动只会提示，由你选覆盖或载入磁盘版本。
 - **依赖本机 `git`**：`git` 不可用时 Host 返回 `git-unavailable`，Git 入口不可用，面板提示「这台机器上找不到 git 命令」。
-- **大仓库会截断**：文件数超过 `maxChangedFiles`、diff 超过 `maxDiffLines` 时只回前 N 条 / 行，并在响应里标 `truncated`。
+- **大仓库会截断**：文件数超过 `maxChangedFiles`、diff 超过 `maxDiffLines`、文件面板超过 `maxTreeEntries` 时只回前 N 条 / 行，并在响应里标 `truncated`。
+- **删除不是回收站**：文件面板的删除是直接删（目录要勾递归确认），删之前请确认 git 里能找回。
 - **基准是远程**：没有上游时退回 `origin/HEAD` 或 `HEAD`；此时只能看到相对该基准的差异，建议先 `git push -u` 设好上游。
 - **二进制文件只在列表可见**（标 `binary: true`），diff 不展开。
 
@@ -145,10 +174,12 @@ cordis_inspect_query({ platform: "client", provider: "EditFiles", method: "dom" 
 cordis_inspect_query({ platform: "client", provider: "EditFiles", method: "menuSelfTest" }) // 程序化点开工作区「⋯」菜单，确认 Git 行被插入
 cordis_inspect_query({ platform: "client", provider: "EditFiles", method: "editorSelfTest", input: { path: "/abs/file.md" } })
 cordis_inspect_query({ platform: "client", provider: "EditFiles", method: "openTabSelfTest", input: { path: "/abs/repo" } })
+cordis_inspect_query({ platform: "client", provider: "EditFiles", method: "filesSelfTest", input: { root: "/tmp/某个可写目录" } })
+cordis_inspect_query({ platform: "client", provider: "EditFiles", method: "panelSelfTest", input: { openFile: true } })
 cordis_inspect_query({ platform: "host", provider: "EditFiles", method: "status" })          // 重启后可用：路由注册结果 + 浏览器调用计数
 ```
 
-前四个跑在页面里（Client 平台），最后一个跑在 Host；`menuSelfTest` / `openTabSelfTest` / `editorSelfTest` 会短暂操作 UI 后自己恢复原状。
+除 `status` 外都跑在页面里（Client 平台）；`menuSelfTest` / `openTabSelfTest` / `editorSelfTest` / `panelSelfTest` 会短暂操作 UI 后自己恢复原状，`filesSelfTest` 只在传入的临时目录里建删自己的东西。
 
 ## 许可证
 

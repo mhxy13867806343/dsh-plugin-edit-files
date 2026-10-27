@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-edit-files",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Edit files right inside the DSH right-Sidebar document preview, and review what differs from the git remote in a Sidebar tab.",
   "type": "module",
   "license": "MIT",

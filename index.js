@@ -1,7 +1,7 @@
 /**
  * dsh-plugin-edit-files —— Host 半边入口。
  *
- * 这个文件只做四件事：声明 name / inject、在 apply() 里把 7 条路由注册进
+ * 这个文件只做四件事：声明 name / inject、在 apply() 里把 11 条路由注册进
  * `ctx.connection.fetch`（并记一份调用计数）、挂一个只读 cordis_inspect 自检入口、
  * 把内部工厂 re-export 给自检与外部脚本。业务逻辑都在 lib/ 下，index.js 保持薄装配层。
  *

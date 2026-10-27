@@ -3,8 +3,9 @@
  *
  * 不依赖 cordis、不联网：用一个假的 ctx 收集 `apply()` 注册的路由，直接调用路由的 fetch，
  * 并在 os.tmpdir() 下现建「bare 远程 + clone 工作区」的临时 git 仓库，覆盖
- * docs/route-contract.md 里 7 条路由的语义与全部边界（非仓库、空仓库、基准回退、
- * 改回一致、未跟踪、删除、改名、二进制、CRLF/BOM、冲突、超限、越界路径、git 缺失等）。
+ * docs/route-contract.md 里 11 条路由的语义与全部边界（非仓库、空仓库、基准回退、
+ * 改回一致、未跟踪、删除、改名、二进制、CRLF/BOM、冲突、超限、越界路径、git 缺失，
+ * 以及工程文件树 / 新建 / 重命名 / 删除与它们的越界、.git、符号链接逃逸守卫等）。
  *
  * 结束打印 PASS/FAIL 汇总；有失败时进程退出码非 0。临时目录在 finally 里清掉。
  */
@@ -73,7 +74,9 @@ function collectRoutes(config) {
     },
   };
   apply(ctx, config);
-  collectRoutes.inspectProviders = inspectProviders;
+  // 只保留第一次 apply 的 provider：后面测试会为不同配置再建 runtime，
+  // 而 inspect 自检要读的是真正处理过请求的那个账本（第一个 runtime）。
+  if (collectRoutes.inspectProviders === undefined) collectRoutes.inspectProviders = inspectProviders;
   return registered;
 }
 
@@ -118,6 +121,9 @@ async function main() {
   const repoDir = path.join(tmpRoot, 'repo');
   const notRepoDir = path.join(tmpRoot, 'not-a-repo');
   const outsideTxt = path.join(tmpRoot, 'outside.txt');
+  const treeRoot = path.join(tmpRoot, 'tree-root');
+  const workspaceRoot = path.join(tmpRoot, 'workspace');
+  const outsideDir = path.join(tmpRoot, 'outside-dir');
   const aTxt = path.join(repoDir, 'a.txt');
   const keepTxt = path.join(repoDir, 'keep.txt');
   const deepTxt = path.join(repoDir, 'nested', 'deep.txt');
@@ -141,6 +147,25 @@ async function main() {
     await fs.writeFile(blobBin, Buffer.from([0, 1, 2, 3, 10]));
     await fs.writeFile(outsideTxt, 'outside\n');
     await fs.mkdir(notRepoDir);
+
+    // 文件树 / 工程文件增删改专用目录（都在 git 仓库外，互不影响）
+    await fs.mkdir(path.join(treeRoot, 'src', 'util'), { recursive: true });
+    await fs.mkdir(path.join(treeRoot, 'node_modules', 'pkg'), { recursive: true });
+    await fs.mkdir(path.join(treeRoot, '.git'), { recursive: true });
+    await fs.writeFile(path.join(treeRoot, 'src', 'main.ts'), 'main\n');
+    await fs.writeFile(path.join(treeRoot, 'src', 'util', 'helper.ts'), 'helper\n');
+    await fs.writeFile(path.join(treeRoot, 'node_modules', 'pkg', 'index.js'), 'pkg\n');
+    await fs.writeFile(path.join(treeRoot, '.git', 'config'), 'gitdir\n');
+    await fs.writeFile(path.join(treeRoot, '.hidden.txt'), 'hidden\n');
+    await fs.writeFile(path.join(treeRoot, 'README.md'), 'readme\n');
+    await fs.symlink(outsideTxt, path.join(treeRoot, 'link'), 'file');
+    await fs.symlink(path.join(treeRoot, 'src'), path.join(treeRoot, 'linkdir'), 'dir');
+
+    await fs.mkdir(path.join(workspaceRoot, 'sub'), { recursive: true });
+    await fs.mkdir(path.join(workspaceRoot, '.git'), { recursive: true });
+    await fs.mkdir(outsideDir, { recursive: true });
+    await fs.writeFile(path.join(outsideDir, 'outside.txt'), 'outside dir file\n');
+
     await git(['add', '-A'], repoDir);
     await git(['commit', '-q', '-m', 'init'], repoDir);
     await git(['push', '-q', '-u', 'origin', 'main'], repoDir);
@@ -152,6 +177,12 @@ async function main() {
     const callTiny = makeCaller(tinyRoutes);
     const fallbackRoutes = collectRoutes({ maxFileBytes: 0, maxDiffLines: 'oops', maxChangedFiles: -1 });
     const callFallback = makeCaller(fallbackRoutes);
+    const maxTreeRoutes = collectRoutes({ maxTreeEntries: 4 });
+    const callMaxTree = makeCaller(maxTreeRoutes);
+    const customTreeRoutes = collectRoutes({ treeIgnores: ['src'] });
+    const callCustomTree = makeCaller(customTreeRoutes);
+    const badTreeRoutes = collectRoutes({ maxTreeEntries: 0, treeIgnores: 'oops' });
+    const callBadTree = makeCaller(badTreeRoutes);
 
     // ── 1. 装配 / health ──
     await test('index.js 导出 name / inject 与内部工厂符合 cordis 约定', async () => {
@@ -162,9 +193,9 @@ async function main() {
       assert.deepEqual(createRuntime({ maxFileBytes: 10 }).limits, { maxFileBytes: 10, maxDiffLines: 4000, maxChangedFiles: 3000 });
     });
 
-    await test('apply 注册 7 条路由，全部 requestBody=buffered 且各自单独注册', async () => {
-      assert.equal(routes.length, 7);
-      assert.equal(new Set(routes.map((route) => route.path)).size, 7);
+    await test('apply 注册 11 条路由，全部 requestBody=buffered 且各自单独注册', async () => {
+      assert.equal(routes.length, 11);
+      assert.equal(new Set(routes.map((route) => route.path)).size, 11);
       for (const route of routes) {
         assert.equal(route.requestBody, 'buffered');
         assert.ok(Array.isArray(route.methods) && route.methods.length > 0);
@@ -178,6 +209,10 @@ async function main() {
       assert.deepEqual(methods[`${API}/git/file`], ['GET']);
       assert.deepEqual(methods[`${API}/file/read`], ['POST']);
       assert.deepEqual(methods[`${API}/file/write`], ['POST']);
+      assert.deepEqual(methods[`${API}/files/tree`], ['GET']);
+      assert.deepEqual(methods[`${API}/files/create`], ['POST']);
+      assert.deepEqual(methods[`${API}/files/rename`], ['POST']);
+      assert.deepEqual(methods[`${API}/files/delete`], ['POST']);
     });
 
     await test('apply 单条路由注册失败不会抛异常', async () => {
@@ -196,7 +231,7 @@ async function main() {
       assert.doesNotThrow(() => apply(ctx, {}));
     });
 
-    await test('GET /health：返回插件名、版本、7 条路由与默认 limits', async () => {
+    await test('GET /health：返回插件名、版本、11 条路由与默认 limits', async () => {
       const { status, headers, data } = await call('GET', `${API}/health`);
       assert.equal(status, 200);
       assert.match(headers.get('content-type') ?? '', /^application\/json/);
@@ -212,6 +247,10 @@ async function main() {
         `${API}/git/file`,
         `${API}/file/read`,
         `${API}/file/write`,
+        `${API}/files/tree`,
+        `${API}/files/create`,
+        `${API}/files/rename`,
+        `${API}/files/delete`,
       ]);
       assert.deepEqual(data.limits, { maxFileBytes: 2097152, maxDiffLines: 4000, maxChangedFiles: 3000 });
     });
@@ -934,7 +973,410 @@ async function main() {
       assert.equal(data.reason, 'missing-path');
     });
 
-    // ── 22. cordis_inspect 自检提供者 ──
+    // ── 22. 工程文件树 ──
+    await test('files/tree：递归列出文件/目录，默认跳过 node_modules 与 .git，含隐藏文件', async () => {
+      const { status, data } = await call('GET', `${API}/files/tree`, { query: { root: treeRoot } });
+      assert.equal(status, 200);
+      assert.equal(data.ok, true);
+      assert.equal(data.root, path.resolve(treeRoot));
+      assert.deepEqual(
+        data.entries.map((entry) => entry.rel),
+        ['.hidden.txt', 'README.md', 'link', 'linkdir', 'src', 'src/main.ts', 'src/util', 'src/util/helper.ts'],
+      );
+      const byRel = new Map(data.entries.map((entry) => [entry.rel, entry]));
+      const pick = (rel) => {
+        const entry = byRel.get(rel);
+        return { name: entry.name, dir: entry.dir, type: entry.type, size: entry.size };
+      };
+      assert.deepEqual(pick('src'), { name: 'src', dir: '', type: 'dir', size: 0 });
+      assert.deepEqual(pick('src/main.ts'), { name: 'main.ts', dir: 'src', type: 'file', size: byteLength('main\n') });
+      assert.equal(typeof byRel.get('src/main.ts').mtimeMs, 'number');
+      assert.deepEqual(pick('link'), { name: 'link', dir: '', type: 'symlink', size: 0 });
+      assert.equal(byRel.get('linkdir').type, 'symlink');
+      assert.equal(byRel.has('node_modules'), false);
+      assert.equal(byRel.has('node_modules/pkg/index.js'), false);
+      assert.equal(byRel.has('.git'), false);
+      assert.deepEqual(data.counts, { files: 6, dirs: 2 });
+      assert.equal(data.truncated, false);
+      assert.equal(data.limit, 20000);
+      assert.deepEqual(data.ignored, ['node_modules', '.git']);
+    });
+
+    await test('files/tree：includeIgnored=1 包含 node_modules 但仍不碰 .git，不展开符号链接目录', async () => {
+      const { data } = await call('GET', `${API}/files/tree`, { query: { root: treeRoot, includeIgnored: '1' } });
+      const rels = data.entries.map((entry) => entry.rel);
+      for (const expected of ['node_modules', 'node_modules/pkg', 'node_modules/pkg/index.js']) {
+        assert.ok(rels.includes(expected), `应包含 ${expected}`);
+      }
+      assert.equal(rels.some((rel) => rel === '.git' || rel.startsWith('.git/')), false);
+      assert.equal(rels.some((rel) => rel.startsWith('linkdir/')), false, '符号链接目录不得展开');
+      assert.deepEqual(data.counts, { files: 7, dirs: 4 });
+      assert.deepEqual(data.ignored, ['.git']);
+    });
+
+    await test('files/tree：limit 只能缩小上限，截断后 truncated=true', async () => {
+      const limited = await call('GET', `${API}/files/tree`, { query: { root: treeRoot, limit: '3' } });
+      assert.equal(limited.status, 200);
+      assert.equal(limited.data.entries.length, 3);
+      assert.deepEqual(limited.data.entries.map((entry) => entry.rel), ['.hidden.txt', 'README.md', 'link']);
+      assert.equal(limited.data.truncated, true);
+      assert.equal(limited.data.limit, 3);
+
+      const overLimit = await callMaxTree('GET', `${API}/files/tree`, { query: { root: treeRoot, limit: '50' } });
+      assert.equal(overLimit.data.entries.length, 4, '请求 limit 不能超过 maxTreeEntries');
+      assert.equal(overLimit.data.limit, 4);
+      assert.equal(overLimit.data.truncated, true);
+    });
+
+    await test('files/tree：treeIgnores 自定义生效、坏配置回退默认', async () => {
+      const custom = await callCustomTree('GET', `${API}/files/tree`, { query: { root: treeRoot } });
+      const customRels = custom.data.entries.map((entry) => entry.rel);
+      assert.equal(customRels.includes('src'), false, '自定义忽略 src 后不应出现');
+      assert.equal(customRels.some((rel) => rel.startsWith('src/')), false);
+      assert.equal(customRels.includes('node_modules'), true, '自定义列表替换默认列表');
+      assert.equal(customRels.some((rel) => rel === '.git' || rel.startsWith('.git/')), false);
+      assert.deepEqual(custom.data.ignored, ['src', '.git']);
+
+      const bad = await callBadTree('GET', `${API}/files/tree`, { query: { root: treeRoot } });
+      const badRels = bad.data.entries.map((entry) => entry.rel);
+      assert.equal(badRels.includes('node_modules'), false, '坏 treeIgnores 应回退默认值');
+      assert.equal(badRels.some((rel) => rel === '.git' || rel.startsWith('.git/')), false);
+      assert.equal(badRels.includes('src/main.ts'), true);
+      assert.equal(bad.data.limit, 20000, '坏 maxTreeEntries 应回退默认值');
+      assert.equal(bad.data.truncated, false);
+    });
+
+    await test('files/tree：缺 root / 相对路径 / 不存在 / 非目录 各自的错误', async () => {
+      const missing = await call('GET', `${API}/files/tree`);
+      assert.equal(missing.status, 400);
+      assert.equal(missing.data.reason, 'missing-root');
+
+      const relative = await call('GET', `${API}/files/tree`, { query: { root: 'relative/dir' } });
+      assert.equal(relative.status, 400);
+      assert.equal(relative.data.reason, 'invalid-path');
+
+      const absent = await call('GET', `${API}/files/tree`, { query: { root: path.join(tmpRoot, 'no-such-dir') } });
+      assert.equal(absent.status, 404);
+      assert.equal(absent.data.reason, 'not-found');
+
+      const file = await call('GET', `${API}/files/tree`, { query: { root: path.join(treeRoot, 'README.md') } });
+      assert.equal(file.status, 400);
+      assert.equal(file.data.reason, 'not-directory');
+    });
+
+    await test('files/tree：root 本身是符号链接目录也能正常列出', async () => {
+      const linkRoot = path.join(tmpRoot, 'tree-link-root');
+      await fs.symlink(treeRoot, linkRoot, 'dir');
+      const { status, data } = await call('GET', `${API}/files/tree`, { query: { root: linkRoot } });
+      assert.equal(status, 200);
+      assert.equal(data.root, path.resolve(linkRoot));
+      assert.ok(data.entries.some((entry) => entry.rel === 'src/main.ts'));
+      await fs.rm(linkRoot);
+    });
+
+    // ── 23. 工程文件：新建 ──
+    await test('files/create：建文件（含 content）/空文件/目录/嵌套，缺省 kind 按 file', async () => {
+      let result = await call('POST', `${API}/files/create`, {
+        body: { root: workspaceRoot, rel: 'notes.txt', kind: 'file', content: 'hello' },
+      });
+      assert.equal(result.status, 200);
+      assert.deepEqual(result.data, { ok: true, rel: 'notes.txt', kind: 'file' });
+      assert.equal(await fs.readFile(path.join(workspaceRoot, 'notes.txt'), 'utf8'), 'hello');
+
+      result = await call('POST', `${API}/files/create`, { body: { root: workspaceRoot, rel: 'empty.txt', kind: 'file' } });
+      assert.equal(result.status, 200);
+      assert.equal(await fs.readFile(path.join(workspaceRoot, 'empty.txt'), 'utf8'), '');
+
+      result = await call('POST', `${API}/files/create`, { body: { root: workspaceRoot, rel: 'newdir', kind: 'dir' } });
+      assert.equal(result.status, 200);
+      assert.deepEqual(result.data, { ok: true, rel: 'newdir', kind: 'dir' });
+      assert.equal((await fs.stat(path.join(workspaceRoot, 'newdir'))).isDirectory(), true);
+
+      result = await call('POST', `${API}/files/create`, {
+        body: { root: workspaceRoot, rel: 'sub/deep.txt', kind: 'file', content: 'deep' },
+      });
+      assert.equal(result.status, 200);
+      assert.equal(await fs.readFile(path.join(workspaceRoot, 'sub', 'deep.txt'), 'utf8'), 'deep');
+
+      result = await call('POST', `${API}/files/create`, { body: { root: workspaceRoot, rel: 'no-kind.txt' } });
+      assert.equal(result.status, 200);
+      assert.deepEqual(result.data, { ok: true, rel: 'no-kind.txt', kind: 'file' });
+      assert.equal((await fs.stat(path.join(workspaceRoot, 'no-kind.txt'))).isFile(), true);
+    });
+
+    await test('files/create：目标已存在 → 409 already-exists', async () => {
+      const bodies = [
+        { root: workspaceRoot, rel: 'notes.txt', kind: 'file', content: 'x' },
+        { root: workspaceRoot, rel: 'notes.txt', kind: 'dir' },
+        { root: workspaceRoot, rel: 'newdir', kind: 'dir' },
+      ];
+      for (const body of bodies) {
+        const { status, data } = await call('POST', `${API}/files/create`, { body });
+        assert.equal(status, 409, JSON.stringify(data));
+        assert.equal(data.reason, 'already-exists');
+      }
+    });
+
+    await test('files/create：父目录不存在 → no-parent；越界/绝对路径/.git 被拒', async () => {
+      const noParent = await call('POST', `${API}/files/create`, {
+        body: { root: workspaceRoot, rel: 'missing/deep.txt', kind: 'file' },
+      });
+      assert.equal(noParent.status, 400);
+      assert.equal(noParent.data.reason, 'no-parent');
+
+      const dotdot = await call('POST', `${API}/files/create`, { body: { root: workspaceRoot, rel: '../escape.txt', kind: 'file' } });
+      assert.equal(dotdot.status, 400);
+      assert.equal(dotdot.data.reason, 'outside-root');
+      await assert.rejects(fs.access(path.join(tmpRoot, 'escape.txt')), '含 .. 的路径不得在 root 外落地');
+
+      const absolute = await call('POST', `${API}/files/create`, {
+        body: { root: workspaceRoot, rel: path.join(workspaceRoot, 'abs.txt'), kind: 'file' },
+      });
+      assert.equal(absolute.status, 400);
+      assert.equal(absolute.data.reason, 'invalid-path');
+
+      const gitFile = await call('POST', `${API}/files/create`, {
+        body: { root: workspaceRoot, rel: '.git/hooks/pre-commit', kind: 'file' },
+      });
+      assert.equal(gitFile.status, 403);
+      assert.equal(gitFile.data.reason, 'protected-path');
+
+      const nestedGit = await call('POST', `${API}/files/create`, { body: { root: workspaceRoot, rel: 'sub/.git/x', kind: 'dir' } });
+      assert.equal(nestedGit.status, 403);
+      assert.equal(nestedGit.data.reason, 'protected-path');
+    });
+
+    await test('files/create：缺/坏参数与超限映射正确', async () => {
+      let result = await call('POST', `${API}/files/create`, { body: { rel: 'x.txt' } });
+      assert.equal(result.status, 400);
+      assert.equal(result.data.reason, 'missing-root');
+
+      result = await call('POST', `${API}/files/create`, { body: { root: workspaceRoot } });
+      assert.equal(result.status, 400);
+      assert.equal(result.data.reason, 'missing-rel');
+
+      result = await call('POST', `${API}/files/create`, { body: { root: 'relative-root', rel: 'x.txt' } });
+      assert.equal(result.status, 400);
+      assert.equal(result.data.reason, 'invalid-path');
+
+      result = await call('POST', `${API}/files/create`, { body: { root: path.join(tmpRoot, 'no-such-root'), rel: 'x.txt' } });
+      assert.equal(result.status, 404);
+      assert.equal(result.data.reason, 'not-found');
+
+      result = await call('POST', `${API}/files/create`, {
+        body: { root: path.join(workspaceRoot, 'notes.txt'), rel: 'x.txt' },
+      });
+      assert.equal(result.status, 400);
+      assert.equal(result.data.reason, 'not-directory');
+
+      result = await callTiny('POST', `${API}/files/create`, {
+        body: { root: workspaceRoot, rel: 'big.txt', kind: 'file', content: 'x'.repeat(40) },
+      });
+      assert.equal(result.status, 413);
+      assert.equal(result.data.reason, 'too-large');
+      assert.equal(result.data.limit, 32);
+    });
+
+    await test('files/create：body 缺失/不是 JSON 对象 → 400 missing-json', async () => {
+      const noBody = await call('POST', `${API}/files/create`);
+      assert.equal(noBody.status, 400);
+      assert.equal(noBody.data.reason, 'missing-json');
+
+      const badJson = await call('POST', `${API}/files/create`, { rawBody: '{not json' });
+      assert.equal(badJson.status, 400);
+      assert.equal(badJson.data.reason, 'missing-json');
+
+      const arrayBody = await call('POST', `${API}/files/create`, { rawBody: '[]' });
+      assert.equal(arrayBody.status, 400);
+      assert.equal(arrayBody.data.reason, 'missing-json');
+    });
+
+    await test('files/create：父目录是逃逸符号链接 → 400 outside-root，且不落地', async () => {
+      const escapeLink = path.join(workspaceRoot, 'linkout');
+      await fs.symlink(outsideDir, escapeLink, 'dir');
+      const { status, data } = await call('POST', `${API}/files/create`, {
+        body: { root: workspaceRoot, rel: 'linkout/evil.txt', kind: 'file', content: 'x' },
+      });
+      assert.equal(status, 400);
+      assert.equal(data.reason, 'outside-root');
+      await assert.rejects(fs.access(path.join(outsideDir, 'evil.txt')));
+      await fs.rm(escapeLink);
+    });
+
+    // ── 24. 工程文件：重命名 / 移动 ──
+    await test('files/rename：同目录改名、移动到子目录、目录改名', async () => {
+      let result = await call('POST', `${API}/files/rename`, {
+        body: { root: workspaceRoot, from: 'notes.txt', to: 'notes-renamed.txt' },
+      });
+      assert.equal(result.status, 200);
+      assert.deepEqual(result.data, { ok: true, from: 'notes.txt', to: 'notes-renamed.txt' });
+      await assert.rejects(fs.access(path.join(workspaceRoot, 'notes.txt')));
+      assert.equal(await fs.readFile(path.join(workspaceRoot, 'notes-renamed.txt'), 'utf8'), 'hello');
+
+      result = await call('POST', `${API}/files/rename`, {
+        body: { root: workspaceRoot, from: 'notes-renamed.txt', to: 'sub/moved.txt' },
+      });
+      assert.equal(result.status, 200);
+      assert.deepEqual(result.data, { ok: true, from: 'notes-renamed.txt', to: 'sub/moved.txt' });
+      assert.equal(await fs.readFile(path.join(workspaceRoot, 'sub', 'moved.txt'), 'utf8'), 'hello');
+
+      result = await call('POST', `${API}/files/rename`, { body: { root: workspaceRoot, from: 'newdir', to: 'renamed-dir' } });
+      assert.equal(result.status, 200);
+      assert.equal((await fs.stat(path.join(workspaceRoot, 'renamed-dir'))).isDirectory(), true);
+    });
+
+    await test('files/rename：目标已存在 / 父目录不存在 / from 不存在', async () => {
+      let result = await call('POST', `${API}/files/rename`, {
+        body: { root: workspaceRoot, from: 'empty.txt', to: 'sub/moved.txt' },
+      });
+      assert.equal(result.status, 409);
+      assert.equal(result.data.reason, 'target-exists');
+      assert.equal((await fs.stat(path.join(workspaceRoot, 'empty.txt'))).isFile(), true);
+      assert.equal((await fs.stat(path.join(workspaceRoot, 'sub', 'moved.txt'))).isFile(), true);
+
+      result = await call('POST', `${API}/files/rename`, { body: { root: workspaceRoot, from: 'empty.txt', to: 'nodir/x.txt' } });
+      assert.equal(result.status, 400);
+      assert.equal(result.data.reason, 'no-parent');
+
+      result = await call('POST', `${API}/files/rename`, { body: { root: workspaceRoot, from: 'no-such.txt', to: 'x.txt' } });
+      assert.equal(result.status, 404);
+      assert.equal(result.data.reason, 'not-found');
+    });
+
+    await test('files/rename：from/to 越界、.git、目录移进自身均被拒', async () => {
+      let result = await call('POST', `${API}/files/rename`, {
+        body: { root: workspaceRoot, from: '../outside.txt', to: 'x.txt' },
+      });
+      assert.equal(result.status, 400);
+      assert.equal(result.data.reason, 'outside-root');
+
+      result = await call('POST', `${API}/files/rename`, { body: { root: workspaceRoot, from: 'empty.txt', to: '../x.txt' } });
+      assert.equal(result.status, 400);
+      assert.equal(result.data.reason, 'outside-root');
+      await assert.rejects(fs.access(path.join(tmpRoot, 'x.txt')));
+
+      result = await call('POST', `${API}/files/rename`, {
+        body: { root: workspaceRoot, from: 'empty.txt', to: path.join(workspaceRoot, 'abs.txt') },
+      });
+      assert.equal(result.status, 400);
+      assert.equal(result.data.reason, 'invalid-path');
+
+      result = await call('POST', `${API}/files/rename`, { body: { root: workspaceRoot, from: '.git/config', to: 'x.txt' } });
+      assert.equal(result.status, 403);
+      assert.equal(result.data.reason, 'protected-path');
+
+      result = await call('POST', `${API}/files/rename`, {
+        body: { root: workspaceRoot, from: 'renamed-dir', to: 'renamed-dir/inside' },
+      });
+      assert.equal(result.status, 400);
+      assert.equal(result.data.reason, 'invalid-path');
+    });
+
+    await test('files/rename：from 是逃逸符号链接 → 400 outside-root；缺 body → missing-json', async () => {
+      const escapeLink = path.join(workspaceRoot, 'rename-link');
+      await fs.symlink(outsideTxt, escapeLink, 'file');
+      const escaped = await call('POST', `${API}/files/rename`, {
+        body: { root: workspaceRoot, from: 'rename-link', to: 'renamed-link' },
+      });
+      assert.equal(escaped.status, 400);
+      assert.equal(escaped.data.reason, 'outside-root');
+      assert.equal((await fs.lstat(escapeLink)).isSymbolicLink(), true);
+      await fs.rm(escapeLink);
+
+      const noBody = await call('POST', `${API}/files/rename`);
+      assert.equal(noBody.status, 400);
+      assert.equal(noBody.data.reason, 'missing-json');
+    });
+
+    // ── 25. 工程文件：删除 ──
+    await test('files/delete：删文件；目录必须先声明 recursive', async () => {
+      let result = await call('POST', `${API}/files/create`, {
+        body: { root: workspaceRoot, rel: 'del-file.txt', kind: 'file', content: 'bye' },
+      });
+      assert.equal(result.status, 200);
+      result = await call('POST', `${API}/files/delete`, { body: { root: workspaceRoot, rel: 'del-file.txt' } });
+      assert.equal(result.status, 200);
+      assert.deepEqual(result.data, { ok: true, rel: 'del-file.txt', recursive: false });
+      await assert.rejects(fs.access(path.join(workspaceRoot, 'del-file.txt')));
+
+      await fs.mkdir(path.join(workspaceRoot, 'del-dir'));
+      await fs.writeFile(path.join(workspaceRoot, 'del-dir', 'child.txt'), 'child\n');
+      result = await call('POST', `${API}/files/delete`, { body: { root: workspaceRoot, rel: 'del-dir' } });
+      assert.equal(result.status, 409);
+      assert.equal(result.data.reason, 'is-directory-needs-recursive');
+      assert.equal((await fs.stat(path.join(workspaceRoot, 'del-dir'))).isDirectory(), true);
+
+      result = await call('POST', `${API}/files/delete`, { body: { root: workspaceRoot, rel: 'del-dir', recursive: true } });
+      assert.equal(result.status, 200);
+      assert.deepEqual(result.data, { ok: true, rel: 'del-dir', recursive: true });
+      await assert.rejects(fs.access(path.join(workspaceRoot, 'del-dir')));
+
+      result = await call('POST', `${API}/files/delete`, { body: { root: workspaceRoot, rel: 'del-dir' } });
+      assert.equal(result.status, 404);
+      assert.equal(result.data.reason, 'not-found');
+    });
+
+    await test('files/delete：root 本身 / .git / 越界 / 绝对路径 / 缺参', async () => {
+      let result = await call('POST', `${API}/files/delete`, { body: { root: workspaceRoot, rel: '' } });
+      assert.equal(result.status, 400);
+      assert.equal(result.data.reason, 'root-itself');
+      result = await call('POST', `${API}/files/delete`, { body: { root: workspaceRoot, rel: '.' } });
+      assert.equal(result.status, 400);
+      assert.equal(result.data.reason, 'root-itself');
+
+      result = await call('POST', `${API}/files/delete`, { body: { root: workspaceRoot, rel: '.git' } });
+      assert.equal(result.status, 403);
+      assert.equal(result.data.reason, 'protected-path');
+      result = await call('POST', `${API}/files/delete`, { body: { root: workspaceRoot, rel: '.git/config' } });
+      assert.equal(result.status, 403);
+      assert.equal(result.data.reason, 'protected-path');
+
+      result = await call('POST', `${API}/files/delete`, { body: { root: workspaceRoot, rel: '../outside.txt' } });
+      assert.equal(result.status, 400);
+      assert.equal(result.data.reason, 'outside-root');
+      result = await call('POST', `${API}/files/delete`, {
+        body: { root: workspaceRoot, rel: path.join(workspaceRoot, 'empty.txt') },
+      });
+      assert.equal(result.status, 400);
+      assert.equal(result.data.reason, 'invalid-path');
+
+      result = await call('POST', `${API}/files/delete`, { body: { rel: 'x.txt' } });
+      assert.equal(result.status, 400);
+      assert.equal(result.data.reason, 'missing-root');
+      result = await call('POST', `${API}/files/delete`, { body: { root: workspaceRoot } });
+      assert.equal(result.status, 400);
+      assert.equal(result.data.reason, 'missing-rel');
+      result = await call('POST', `${API}/files/delete`, { body: { root: 'relative-root', rel: 'x' } });
+      assert.equal(result.status, 400);
+      assert.equal(result.data.reason, 'invalid-path');
+
+      const noBody = await call('POST', `${API}/files/delete`);
+      assert.equal(noBody.status, 400);
+      assert.equal(noBody.data.reason, 'missing-json');
+    });
+
+    await test('files/delete：符号链接指向仓库外 → outside-root；指向内部则只删链接', async () => {
+      const outsideTarget = path.join(outsideDir, 'delete-target.txt');
+      await fs.writeFile(outsideTarget, 'do not delete\n');
+      const escapeLink = path.join(workspaceRoot, 'delete-escape-link');
+      await fs.symlink(outsideTarget, escapeLink, 'file');
+      let result = await call('POST', `${API}/files/delete`, { body: { root: workspaceRoot, rel: 'delete-escape-link' } });
+      assert.equal(result.status, 400);
+      assert.equal(result.data.reason, 'outside-root');
+      assert.equal((await fs.lstat(escapeLink)).isSymbolicLink(), true);
+      assert.equal(await fs.readFile(outsideTarget, 'utf8'), 'do not delete\n');
+      await fs.rm(escapeLink);
+
+      const insideTarget = path.join(workspaceRoot, 'empty.txt');
+      const insideLink = path.join(workspaceRoot, 'inside-link');
+      await fs.symlink(insideTarget, insideLink, 'file');
+      result = await call('POST', `${API}/files/delete`, { body: { root: workspaceRoot, rel: 'inside-link' } });
+      assert.equal(result.status, 200);
+      await assert.rejects(fs.access(insideLink));
+      assert.equal((await fs.stat(insideTarget)).isFile(), true, '删链接不能删到目标文件');
+    });
+
+    // ── 26. cordis_inspect 自检提供者 ──
     await test('cordis_inspect 自检提供者：EditFiles.status 回报路由与调用计数', async () => {
       const providers = collectRoutes.inspectProviders ?? [];
       assert.equal(providers.length, 1, '应当注册一个 Host inspect provider');
@@ -943,7 +1385,7 @@ async function main() {
       assert.equal(provider.manifest.methods[0].name, 'status');
       const snapshot = await provider.query('status', {});
       assert.equal(snapshot.plugin, 'dsh-plugin-edit-files');
-      assert.equal(snapshot.registeredRoutes.length, 7);
+      assert.equal(snapshot.registeredRoutes.length, 11);
       assert.deepEqual(snapshot.registrationFailures, []);
       assert.ok(snapshot.totalHits > 0, '自检里已经调用过路由，计数应大于 0');
       assert.ok(snapshot.recentHits.length > 0);

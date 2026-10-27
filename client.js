@@ -103,6 +103,65 @@ window.__ModuleLoader__.load({
       'status.C': '复制',
       'status.T': '类型变更',
       'status.U': '冲突',
+      'fm.title': '文件',
+      'fm.search': '搜索文件名…',
+      'fm.searchHint': '支持模糊匹配：mnts 也能找到 main.ts',
+      'fm.sortName': '名称',
+      'fm.sortTime': '修改时间',
+      'fm.sortSize': '大小',
+      'fm.sortAsc': '升序',
+      'fm.sortDesc': '降序',
+      'fm.onlyChanged': '只看改动',
+      'fm.showIgnored': '显示忽略目录',
+      'fm.refresh': '刷新',
+      'fm.newFile': '新建文件',
+      'fm.newDir': '新建文件夹',
+      'fm.rename': '重命名',
+      'fm.delete': '删除',
+      'fm.loading': '正在读取文件列表…',
+      'fm.empty': '这个目录是空的',
+      'fm.emptySearch': '没有匹配的文件',
+      'fm.noWorkspace': '没有可浏览的工作区',
+      'fm.pickWorkspace': '工作区',
+      'fm.truncated': '文件过多，只显示前 {n} 条',
+      'fm.summary': '{files} 个文件 · {dirs} 个目录',
+      'fm.changed': '{n} 个文件有改动',
+      'fm.clean': '与远程一致',
+      'fm.openHint': '点文件在编辑器里打开，点目录进入',
+      'fm.newFileTitle': '新建文件',
+      'fm.newDirTitle': '新建文件夹',
+      'fm.renameTitle': '重命名',
+      'fm.name': '名称',
+      'fm.createAt': '创建在 {dir}',
+      'fm.cancel': '取消',
+      'fm.confirm': '确定',
+      'fm.busy': '处理中…',
+      'fm.created': '已创建 {name}',
+      'fm.renamed': '已重命名',
+      'fm.deleted': '已删除 {name}',
+      'fm.deleteTitle': '删除「{name}」？',
+      'fm.deleteHint': '删除后不可恢复；如果是目录，会连同里面的文件一起删掉。',
+      'fm.recursive': '我确认递归删除这个目录',
+      'fm.dir': '目录',
+      'fm.link': '链接',
+      'fm.rootBadge': '工作区',
+      'fm.restartNeeded': '文件面板的 Host 路由需要重启一次 DSH Desktop 才能加载。',
+      'fm.restartHint': '升级/首次安装 Host 代码后，运行中的进程还在用旧模块；重启后即可使用。',
+      'fm.restartButton': '重启 DSH',
+      'fm.restartConfirm': '现在重启 DSH Desktop？应用会重启，当前会话记录会保留。',
+      'fm.restarting': '正在重启…',
+      'fm.restartFailed': '重启请求失败，请手动重启 DSH',
+
+      'err.already-exists': '目标已存在',
+      'err.target-exists': '目标已存在',
+      'err.no-parent': '上级目录不存在',
+      'err.invalid-path': '路径不合法',
+      'err.outside-root': '路径超出工作区',
+      'err.protected-path': '受保护路径（.git）',
+      'err.root-itself': '不能删除工作区根目录',
+      'err.is-directory-needs-recursive': '目录需要勾选递归删除',
+      'err.not-directory': '不是目录',
+      'err.not-found': '路径不存在',
       'status.?': '新文件',
     };
 
@@ -176,6 +235,65 @@ window.__ModuleLoader__.load({
       'status.C': 'copied',
       'status.T': 'type changed',
       'status.U': 'conflicted',
+      'fm.title': 'Files',
+      'fm.search': 'Search file names…',
+      'fm.searchHint': 'Fuzzy matching: "mnts" also finds main.ts',
+      'fm.sortName': 'Name',
+      'fm.sortTime': 'Modified',
+      'fm.sortSize': 'Size',
+      'fm.sortAsc': 'Ascending',
+      'fm.sortDesc': 'Descending',
+      'fm.onlyChanged': 'Changed only',
+      'fm.showIgnored': 'Show ignored folders',
+      'fm.refresh': 'Refresh',
+      'fm.newFile': 'New file',
+      'fm.newDir': 'New folder',
+      'fm.rename': 'Rename',
+      'fm.delete': 'Delete',
+      'fm.loading': 'Reading files…',
+      'fm.empty': 'This folder is empty',
+      'fm.emptySearch': 'No matching files',
+      'fm.noWorkspace': 'No workspace to browse',
+      'fm.pickWorkspace': 'Workspace',
+      'fm.truncated': 'Too many files — showing the first {n}',
+      'fm.summary': '{files} files · {dirs} folders',
+      'fm.changed': '{n} files changed',
+      'fm.clean': 'Matches the remote',
+      'fm.openHint': 'Click a file to edit it, a folder to enter it',
+      'fm.newFileTitle': 'New file',
+      'fm.newDirTitle': 'New folder',
+      'fm.renameTitle': 'Rename',
+      'fm.name': 'Name',
+      'fm.createAt': 'Created in {dir}',
+      'fm.cancel': 'Cancel',
+      'fm.confirm': 'OK',
+      'fm.busy': 'Working…',
+      'fm.created': 'Created {name}',
+      'fm.renamed': 'Renamed',
+      'fm.deleted': 'Deleted {name}',
+      'fm.deleteTitle': 'Delete "{name}"?',
+      'fm.deleteHint': 'This cannot be undone. A folder is deleted together with its contents.',
+      'fm.recursive': 'I understand this deletes the folder recursively',
+      'fm.dir': 'Folder',
+      'fm.link': 'Link',
+      'fm.rootBadge': 'workspace',
+      'fm.restartNeeded': 'The file panel needs one DSH Desktop restart to load its Host routes.',
+      'fm.restartHint': 'After installing or upgrading Host code, the running process still uses the old module; restart once and it works.',
+      'fm.restartButton': 'Restart DSH',
+      'fm.restartConfirm': 'Restart DSH Desktop now? The app restarts; this Session is preserved.',
+      'fm.restarting': 'Restarting…',
+      'fm.restartFailed': 'Restart request failed — please restart DSH manually',
+
+      'err.already-exists': 'Target already exists',
+      'err.target-exists': 'Target already exists',
+      'err.no-parent': 'Parent folder does not exist',
+      'err.invalid-path': 'Invalid path',
+      'err.outside-root': 'Path is outside the workspace',
+      'err.protected-path': 'Protected path (.git)',
+      'err.root-itself': 'Cannot delete the workspace root',
+      'err.is-directory-needs-recursive': 'Confirm recursive deletion for a folder',
+      'err.not-directory': 'Not a folder',
+      'err.not-found': 'Path not found',
       'status.?': 'new file',
     };
 
@@ -284,6 +402,12 @@ window.__ModuleLoader__.load({
 .dsh-ef-scroll::-webkit-scrollbar-thumb{background:rgba(127,127,127,.28);border-radius:6px;border:2px solid transparent;background-clip:content-box}
 .dsh-ef-scroll::-webkit-scrollbar-track{background:transparent}
 @media (max-width: 860px){.dsh-ef-editor{left:12px !important;width:auto !important}}
+.dsh-ef-fm-row:hover{background:var(--dsw-alias-bg-layer-2,rgba(127,127,127,.10))}
+.dsh-ef-fm-row[data-selected="1"]{background:rgba(36,123,191,.10)}
+.dsh-ef-fm-actions{opacity:0;transition:opacity .12s ease}
+.dsh-ef-fm-row:hover .dsh-ef-fm-actions,.dsh-ef-fm-row:focus-within .dsh-ef-fm-actions{opacity:1}
+.dsh-ef-fm-input:focus{outline:2px solid var(--dsw-alias-brand-primary,#247bbf);outline-offset:-1px}
+.dsh-ef-fm-input::placeholder{color:var(--dsw-alias-label-tertiary,#71717a)}
 `;
       document.head.appendChild(style);
       return () => {
@@ -489,6 +613,17 @@ window.__ModuleLoader__.load({
           return translate(t, 'editor.conflict');
         case 'network':
           return translate(t, 'git.error') + ' · network';
+        case 'already-exists':
+        case 'target-exists':
+        case 'no-parent':
+        case 'invalid-path':
+        case 'outside-root':
+        case 'protected-path':
+        case 'root-itself':
+        case 'is-directory-needs-recursive':
+        case 'not-directory':
+        case 'not-found':
+          return translate(t, `err.${reason}`);
         default:
           return translate(t, 'git.error') + (reason ? ` · ${reason}` : '');
       }
@@ -1136,6 +1271,89 @@ window.__ModuleLoader__.load({
       return result;
     }
 
+    /** 在临时目录里跑一遍四条文件路由（自建自删）。 */
+    async function filesSelfTest(input) {
+      const root = input !== null && typeof input === 'object' && typeof input.root === 'string' ? input.root : '';
+      const result = { root, steps: {} };
+      if (root.length === 0) return result;
+      const step = async (name, request) => {
+        const answer = await request();
+        result.steps[name] = answer.ok === true
+          ? { ok: true, reason: null }
+          : { ok: false, reason: answer.reason, error: answer.error };
+        return answer;
+      };
+      await step('mkdir', () => apiPost('/files/create', { root, rel: 'dsh-selftest-dir', kind: 'dir' }));
+      await step('create-file', () => apiPost('/files/create', { root, rel: 'dsh-selftest-dir/a.txt', kind: 'file', content: 'hello' }));
+      await step('tree', async () => {
+        const tree = await apiGet('/files/tree', { root, includeIgnored: '1' });
+        if (tree.ok !== true) return tree;
+        const hasFile = Array.isArray(tree.entries) && tree.entries.some((entry) => entry.rel === 'dsh-selftest-dir/a.txt');
+        const hasDir = Array.isArray(tree.entries) && tree.entries.some((entry) => entry.rel === 'dsh-selftest-dir' && entry.type === 'dir');
+        return hasFile && hasDir ? { ok: true } : { ok: false, reason: 'tree-missing-entry', counts: tree.counts };
+      });
+      await step('read-back', async () => {
+        const read = await apiPost('/file/read', { path: `${root}/dsh-selftest-dir/a.txt` });
+        return read.ok === true && read.content === 'hello' ? { ok: true } : { ok: false, reason: 'content-mismatch' };
+      });
+      await step('rename', () => apiPost('/files/rename', { root, from: 'dsh-selftest-dir/a.txt', to: 'dsh-selftest-dir/b.txt' }));
+      await step('delete-recursive', () => apiPost('/files/delete', { root, rel: 'dsh-selftest-dir', recursive: true }));
+      await step('delete-nonrecursive-guard', async () => {
+        await apiPost('/files/create', { root, rel: 'dsh-selftest-dir2', kind: 'dir' });
+        const refused = await apiPost('/files/delete', { root, rel: 'dsh-selftest-dir2' });
+        const cleaned = await apiPost('/files/delete', { root, rel: 'dsh-selftest-dir2', recursive: true });
+        if (refused.ok === true) return { ok: false, reason: 'directory-deleted-without-recursive' };
+        return cleaned.ok === true ? { ok: true } : cleaned;
+      });
+      result.ok = Object.values(result.steps).every((entry) => entry.ok === true);
+      return result;
+    }
+
+    /** 切到文件面板 → 观察渲染 → 可选点文件 → 切回对话。 */
+    async function panelSelfTest(input) {
+      const openFile = input !== null && typeof input === 'object' && input.openFile === true;
+      const ctx = runtime.ctx;
+      const result = { switched: false, rendered: false, rows: 0, searchInput: false, clickedFile: null, editorOpened: false, restored: false, issues: [], text: '' };
+      // layout 没写进插件 inject（只在这个自检里用），用 get 拿，不阻塞正常加载。
+      const layout = ctx === null ? undefined : typeof ctx.get === 'function' ? ctx.get('layout') : ctx.layout;
+      if (layout === undefined || layout === null || typeof layout.selectPanel !== 'function') return result;
+      try {
+        layout.selectPanel(PANEL_ID);
+        result.switched = true;
+      } catch (error) {
+        result.issues.push(String(error && error.message ? error.message : error));
+        return result;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+      const panel = document.querySelector('[data-edit-files-panel]');
+      result.rendered = panel !== null;
+      if (panel !== null) {
+        result.rows = panel.querySelectorAll('.dsh-ef-fm-row').length;
+        result.searchInput = panel.querySelector('input.dsh-ef-fm-input') !== null;
+        result.text = (panel.innerText || '').slice(0, 400);
+        if (openFile) {
+          const row = panel.querySelector('.dsh-ef-fm-row');
+          if (row !== null) {
+            result.clickedFile = row.getAttribute('title');
+            row.click();
+            await new Promise((resolve) => setTimeout(resolve, 900));
+            result.editorOpened = document.querySelector('.dsh-ef-editor') !== null;
+            editorActions.forceClose();
+            await new Promise((resolve) => setTimeout(resolve, 250));
+          }
+        }
+      }
+      try {
+        layout.selectPanel('conversation');
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        result.restored = document.querySelector('[data-edit-files-panel]') === null;
+      } catch {
+        /* 忽略 */
+      }
+      result.issues = renderIssues.slice(-5);
+      return result;
+    }
+
     /** 页面上与本插件相关的控件清单（只读，供 dom 自检）。 */
     function domSnapshot() {
       const pick = (selector) => {
@@ -1299,6 +1517,31 @@ window.__ModuleLoader__.load({
                     outputSchema: { description: '自检结果：浮层是否出现、保存状态、读回内容是否一致。' },
                   },
                   {
+                    name: 'filesSelfTest',
+                    description: '自动化自检：在一个临时目录里跑一遍 files/tree + create + rename + delete 四条 Host 路由（会清理自己创建的东西）。',
+                    inputSchema: {
+                      type: 'object',
+                      properties: {
+                        root: { type: 'string', description: '一个已存在、可写的临时目录绝对路径' },
+                      },
+                      required: ['root'],
+                      additionalProperties: false,
+                    },
+                    outputSchema: { description: '自检结果：每一步是否成功。' },
+                  },
+                  {
+                    name: 'panelSelfTest',
+                    description: '自动化自检：切到「文件」主面板，确认文件列表渲染出来；可选点一个文件验证编辑浮层，然后切回对话页。',
+                    inputSchema: {
+                      type: 'object',
+                      properties: {
+                        openFile: { type: 'boolean', description: '是否顺带点一个文件打开编辑器' },
+                      },
+                      additionalProperties: false,
+                    },
+                    outputSchema: { description: '自检结果：面板是否渲染、行数、点文件是否打开编辑器。' },
+                  },
+                  {
                     name: 'openTabSelfTest',
                     description: '自动化自检：短暂打开「Git 改动」右栏标签页，确认正文渲染出基准/文件列表，然后关掉标签页恢复原状。',
                     inputSchema: {
@@ -1326,6 +1569,14 @@ window.__ModuleLoader__.load({
                   };
                   probe.health = await apiGet('/health');
                   if (path !== undefined) {
+                    const tree = await apiGet('/files/tree', { root: path, limit: '50' });
+                    probe.files = {
+                      ok: tree.ok === true,
+                      counts: tree.ok === true ? tree.counts : null,
+                      truncated: tree.ok === true ? tree.truncated === true : null,
+                      entries: tree.ok === true && Array.isArray(tree.entries) ? tree.entries.length : 0,
+                      error: tree.ok === true ? null : tree,
+                    };
                     const info = await apiGet('/git/info', { path });
                     const changes = await apiGet('/git/changes', { path });
                     const file = await apiGet('/git/file', { path });
@@ -1351,6 +1602,12 @@ window.__ModuleLoader__.load({
                 }
                 if (method === 'openTabSelfTest') {
                   return await openTabSelfTest(path);
+                }
+                if (method === 'filesSelfTest') {
+                  return await filesSelfTest(input);
+                }
+                if (method === 'panelSelfTest') {
+                  return await panelSelfTest(input);
                 }
                 if (method === 'editorSelfTest') {
                   return await editorSelfTest(input);
@@ -2368,6 +2625,922 @@ window.__ModuleLoader__.load({
       bumpGit();
     };
 
+    // ───────────────────────────────────────────────────────── 工程文件面板（主面板）
+
+    /** 主面板 id：同时用于 `main`（keyed）与 `sidebar.panellist`（id）两个注册。 */
+    const PANEL_ID = 'edit-files-browser';
+    const ROOT_STORAGE_KEY = 'dsh-edit-files.root';
+
+    function readStoredRoot() {
+      try {
+        return window.localStorage.getItem(ROOT_STORAGE_KEY) || '';
+      } catch {
+        return '';
+      }
+    }
+
+    function storeRoot(path) {
+      try {
+        if (typeof path === 'string' && path.length > 0) window.localStorage.setItem(ROOT_STORAGE_KEY, path);
+      } catch {
+        /* localStorage 不可用就算了 */
+      }
+    }
+
+    /** WorkspaceSnapshot → [{workspaceId, path, title, sessionIds}]（顺序即侧栏顺序）。 */
+    function workspaceListOf(snapshot) {
+      const items = snapshot && Array.isArray(snapshot.items) ? snapshot.items : [];
+      const list = [];
+      for (const item of items) {
+        if (item === null || typeof item !== 'object' || typeof item.path !== 'string') continue;
+        list.push({
+          workspaceId: item.workspaceId,
+          path: item.path,
+          title: typeof item.title === 'string' && item.title.length > 0 ? item.title : basename(item.path),
+          sessionIds: Array.isArray(item.sessionIds) ? item.sessionIds : [],
+        });
+      }
+      return list;
+    }
+
+    /** 会话快照里「主视图正挂着」的那个会话（也就是屏幕上的会话）。 */
+    function currentSessionIdOf(snapshot) {
+      if (snapshot === null || typeof snapshot !== 'object') return undefined;
+      const byId = snapshot.byId;
+      if (byId === null || typeof byId !== 'object') return undefined;
+      for (const id of Object.keys(byId)) {
+        const row = byId[id];
+        if (row && row.retainedBy && (row.retainedBy.mainView ?? 0) > 0) return id;
+      }
+      return undefined;
+    }
+
+    function trimSlashes(value) {
+      return String(value || '')
+        .replace(/\\/gu, '/')
+        .replace(/^\/+/u, '')
+        .replace(/\/+$/u, '');
+    }
+
+    function joinRel(base, name) {
+      const head = trimSlashes(base);
+      const tail = trimSlashes(name);
+      if (head.length === 0) return tail;
+      if (tail.length === 0) return head;
+      return `${head}/${tail}`;
+    }
+
+    function dirOfRel(rel) {
+      const normalized = trimSlashes(rel);
+      const index = normalized.lastIndexOf('/');
+      return index < 0 ? '' : normalized.slice(0, index);
+    }
+
+    function rootPathOf(root, rel) {
+      const base = String(root || '').replace(/\/+$/u, '');
+      const tail = trimSlashes(rel);
+      return tail.length === 0 ? base : `${base}/${tail}`;
+    }
+
+    function formatMtime(ms) {
+      if (typeof ms !== 'number' || !Number.isFinite(ms)) return '';
+      const date = new Date(ms);
+      const pad = (value) => String(value).padStart(2, '0');
+      return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    }
+
+    function formatSizeShort(bytes) {
+      if (typeof bytes !== 'number' || !Number.isFinite(bytes) || bytes <= 0) return '';
+      if (bytes < 1024) return `${bytes}B`;
+      if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)}K`;
+      return `${(bytes / 1024 / 1024).toFixed(1)}M`;
+    }
+
+    /**
+     * 模糊匹配：needle 的字符按顺序出现在 haystack 里才算命中，
+     * 连续命中 / 词首命中 / 基名命中加分；不命中返回 null。
+     * @param {string} needle 用户输入
+     * @param {string} haystack 候选（相对路径）
+     * @returns {number|null}
+     */
+    function fuzzyScore(needle, haystack) {
+      const query = String(needle || '').toLowerCase();
+      const text = String(haystack || '').toLowerCase();
+      if (query.length === 0) return 0;
+      if (query.length > text.length) return null;
+      let score = 0;
+      let cursor = 0;
+      let previous = -1;
+      for (const char of query) {
+        let found = -1;
+        for (let index = cursor; index < text.length; index += 1) {
+          if (text[index] === char) {
+            found = index;
+            break;
+          }
+        }
+        if (found < 0) return null;
+        score += 1;
+        if (found === previous + 1) score += 3;
+        if (found === 0 || text[found - 1] === '/' || text[found - 1] === '.' || text[found - 1] === '_' || text[found - 1] === '-') score += 2;
+        previous = found;
+        cursor = found + 1;
+      }
+      const slash = text.lastIndexOf('/');
+      if (slash >= 0 && previous > slash) score += 2;
+      score -= Math.min(8, Math.round(text.length / 40));
+      return score;
+    }
+
+    // ── 面板图标 ──
+
+    const IconFolder = (props) =>
+      svg(props, [h('path', { key: 'a', d: 'M2 4.2h4.1l1.3 1.8H14v7.2a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V4.2z' })]);
+    const IconFolderOpen = (props) =>
+      svg(props, [
+        h('path', { key: 'a', d: 'M2 4.2h4.1l1.3 1.8H14v1.4H5.3L3.6 13H2V4.2z' }),
+        h('path', { key: 'b', d: 'M5.3 7.4h9.2L12.8 13H2.9l2.4-5.6z' }),
+      ]);
+    const IconLinkFile = (props) =>
+      svg(props, [
+        h('path', { key: 'a', d: 'M6.2 9.8a2.6 2.6 0 0 1 0-3.7l1.6-1.6' }),
+        h('path', { key: 'b', d: 'M9.2 9.8l1.6-1.6a2.6 2.6 0 0 0-3.7-3.7' }),
+        h('path', { key: 'c', d: 'M3 13h10' }),
+      ]);
+    const IconPlus = (props) => svg(props, [h('path', { key: 'a', d: 'M8 3v10M3 8h10' })]);
+    const IconSearch = (props) =>
+      svg(props, [
+        h('circle', { key: 'a', cx: 7, cy: 7, r: 4.2 }),
+        h('path', { key: 'b', d: 'M10.2 10.2L14 14' }),
+      ]);
+    const IconTrash = (props) =>
+      svg(props, [
+        h('path', { key: 'a', d: 'M3 4.5h10M6.5 4.5V3h3v1.5' }),
+        h('path', { key: 'b', d: 'M4.5 4.5l.7 8.2a1 1 0 0 0 1 .8h3.6a1 1 0 0 0 1-.8l.7-8.2' }),
+      ]);
+    const IconSortDown = (props) => svg(props, [h('path', { key: 'a', d: 'M8 3v10M4.5 9.5L8 13l3.5-3.5' })]);
+    const IconSortUp = (props) => svg(props, [h('path', { key: 'a', d: 'M8 13V3M4.5 6.5L8 3l3.5 3.5' })]);
+    const IconPencil = (props) =>
+      svg(props, [h('path', { key: 'a', d: 'M10.5 2.5l3 3L5 14H2v-3l8.5-8.5z' }), h('path', { key: 'b', d: 'M9 4l3 3' })]);
+
+    /** 左栏面板图标。 */
+    const FileManagerIcon = (props) => h(IconFolder, { size: props.size || 18 });
+
+    /** 一个文件/目录行的图标。 */
+    function entryIcon(entry) {
+      if (entry.type === 'dir') return h(IconFolder, { size: 15 });
+      if (entry.type === 'symlink') return h(IconLinkFile, { size: 15 });
+      return h(IconFile, { size: 15 });
+    }
+
+    // ── 小弹窗（新建 / 重命名 / 删除确认） ──
+
+    function FileDialog({ t, dialog, busy, onCancel, onSubmit }) {
+      const [name, setName] = useState(dialog.name || '');
+      const [recursive, setRecursive] = useState(false);
+      const inputRef = useRef(null);
+      const isDelete = dialog.kind === 'delete';
+      const isRename = dialog.kind === 'rename';
+      const titleKey = isDelete ? 'fm.deleteTitle' : isRename ? 'fm.renameTitle' : dialog.kind === 'create-dir' ? 'fm.newDirTitle' : 'fm.newFileTitle';
+      const vars = isDelete ? { name: dialog.name } : undefined;
+
+      useEffect(() => {
+        if (inputRef.current !== null) {
+          inputRef.current.focus();
+          inputRef.current.select();
+        }
+      }, []);
+
+      const canSubmit = isDelete ? (!dialog.isDir || recursive) && busy !== true : name.trim().length > 0 && busy !== true;
+
+      const submit = () => {
+        if (!canSubmit) return;
+        onSubmit(isDelete ? { recursive } : { name: name.trim() });
+      };
+
+      return h(
+        'div',
+        {
+          style: {
+            position: 'fixed',
+            inset: 0,
+            zIndex: 2400,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'rgba(0,0,0,.38)',
+          },
+          onClick: () => {
+            if (busy !== true) onCancel();
+          },
+        },
+        h(
+          'div',
+          {
+            role: 'dialog',
+            'aria-modal': true,
+            onClick: (event) => event.stopPropagation(),
+            onKeyDown: (event) => {
+              if (event.key === 'Escape') {
+                event.preventDefault();
+                if (busy !== true) onCancel();
+              }
+              if (event.key === 'Enter' && !isDelete) {
+                event.preventDefault();
+                submit();
+              }
+            },
+            style: {
+              width: 'min(460px, calc(100vw - 48px))',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px',
+              padding: '18px',
+              borderRadius: '12px',
+              border: `1px solid ${LINE_2}`,
+              background: BG_OVER,
+              color: INK,
+              boxShadow: '0 18px 48px rgba(0,0,0,.4)',
+            },
+          },
+          h('div', { style: { fontSize: '14px', fontWeight: 600 } }, translate(t, titleKey, vars)),
+          isDelete
+            ? h('div', { style: { fontSize: '12.5px', color: INK_2, lineHeight: 1.6 } }, translate(t, 'fm.deleteHint'))
+            : h(
+                'input',
+                {
+                  ref: inputRef,
+                  className: 'dsh-ef-fm-input',
+                  value: name,
+                  placeholder: translate(t, 'fm.name'),
+                  onChange: (event) => setName(event.target.value),
+                  onKeyDown: (event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault();
+                      submit();
+                    }
+                  },
+                  style: {
+                    font: 'inherit',
+                    fontSize: '13px',
+                    padding: '7px 10px',
+                    borderRadius: '7px',
+                    border: `0.5px solid ${LINE_2}`,
+                    background: BG_1,
+                    color: INK,
+                    outline: 'none',
+                  },
+                },
+              ),
+          isDelete && dialog.isDir === true
+            ? h(
+                'label',
+                { style: { display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12.5px', color: WARN, cursor: 'pointer' } },
+                h('input', { type: 'checkbox', checked: recursive, onChange: (event) => setRecursive(event.target.checked) }),
+                translate(t, 'fm.recursive'),
+              )
+            : null,
+          !isDelete && dialog.cwd !== undefined
+            ? h('div', { style: { fontSize: '11.5px', color: INK_3 } }, translate(t, 'fm.createAt', { dir: dialog.cwd || '/' }))
+            : null,
+          dialog.error !== undefined && dialog.error !== null
+            ? h('div', { style: { fontSize: '12.5px', color: ERROR } }, reasonText(t, dialog.error.reason, dialog.error))
+            : null,
+          h(
+            'div',
+            { style: { display: 'flex', justifyContent: 'flex-end', gap: '8px' } },
+            h(
+              'button',
+              {
+                type: 'button',
+                className: 'dsh-ef-btn',
+                disabled: busy === true,
+                onClick: onCancel,
+                style: { ...S.btn, height: '28px', padding: '0 14px', border: `0.5px solid ${LINE_2}` },
+              },
+              translate(t, 'fm.cancel'),
+            ),
+            h(
+              'button',
+              {
+                type: 'button',
+                className: 'dsh-ef-btn',
+                disabled: !canSubmit,
+                onClick: submit,
+                style: { ...S.btn, ...(isDelete ? S.btnDanger : S.btnPrimary), height: '28px' },
+              },
+              busy === true ? translate(t, 'fm.busy') : translate(t, 'fm.confirm'),
+            ),
+          ),
+        ),
+      );
+    }
+
+    // ── 文件面板页 ──
+
+    const FileManagerPage = (props) => {
+      const t = props.t;
+      const useWorkspaces = props.useWorkspaces;
+      const useSessions = props.useSessions;
+      const usePanelInfo = props.usePanelInfo;
+      const workspaces = useWorkspaces((snapshot) => snapshot);
+      const sessions = useSessions((snapshot) => snapshot);
+      const panelInfo = usePanelInfo((snapshot) => snapshot);
+      const bump = useStoreValue(gitBump, (value) => value);
+
+      const workspaceList = useMemo(() => workspaceListOf(workspaces), [workspaces]);
+      const currentSessionId = useMemo(() => currentSessionIdOf(sessions), [sessions]);
+      const currentWorkspacePath = useMemo(() => workspacePathOf(workspaces, currentSessionId), [workspaces, currentSessionId]);
+      const active = Boolean(panelInfo && panelInfo.activePanelId === PANEL_ID);
+
+      const [root, setRoot] = useState(() => readStoredRoot());
+      const [tree, setTree] = useState({ loading: false, data: null, error: null });
+      const [changes, setChanges] = useState(null);
+      const [refreshSeq, setRefreshSeq] = useState(0);
+      const [cwd, setCwd] = useState('');
+      const [query, setQuery] = useState('');
+      const [sortKey, setSortKey] = useState('name');
+      const [sortDir, setSortDir] = useState('asc');
+      const [onlyChanged, setOnlyChanged] = useState(false);
+      const [includeIgnored, setIncludeIgnored] = useState(false);
+      const [selection, setSelection] = useState(null);
+      const [dialog, setDialog] = useState(null);
+      const [dialogBusy, setDialogBusy] = useState(false);
+      const [notice, setNotice] = useState(null);
+      const [restartPhase, setRestartPhase] = useState('idle');
+
+      // 工作区：优先用持久化的；否则跟当前会话走；再不行取第一个。
+      useEffect(() => {
+        if (root.length > 0 && workspaceList.some((item) => item.path === root)) return;
+        const fallback = currentWorkspacePath || (workspaceList.length > 0 ? workspaceList[0].path : '');
+        if (fallback.length > 0 && fallback !== root) setRoot(fallback);
+      }, [root, currentWorkspacePath, workspaceList]);
+
+      useEffect(() => {
+        storeRoot(root);
+      }, [root]);
+
+      // 切工作区时回到根目录
+      useEffect(() => {
+        setCwd('');
+        setQuery('');
+        setSelection(null);
+      }, [root]);
+
+      // 取目录树 + git 改动（同一个 root）
+      useEffect(() => {
+        let live = true;
+        if (typeof root !== 'string' || root.length === 0) {
+          setTree({ loading: false, data: null, error: null });
+          setChanges(null);
+          return () => {
+            live = false;
+          };
+        }
+        setTree((prev) => ({ ...prev, loading: true }));
+        Promise.all([
+          apiGet('/files/tree', { root, includeIgnored: includeIgnored ? '1' : undefined }),
+          apiGet('/git/changes', { path: root }),
+        ]).then(([treeResult, changesResult]) => {
+          if (!live) return;
+          if (treeResult.ok === true) setTree({ loading: false, data: treeResult, error: null });
+          else setTree({ loading: false, data: null, error: treeResult });
+          setChanges(changesResult.ok === true ? changesResult : null);
+        });
+        return () => {
+          live = false;
+        };
+      }, [root, includeIgnored, refreshSeq, bump]);
+
+      // 面板在前台时每 10 秒静默刷新，文件/外部改动都能跟上
+      useEffect(() => {
+        if (!active || typeof root !== 'string' || root.length === 0) return undefined;
+        const timer = setInterval(() => setRefreshSeq((value) => value + 1), 10000);
+        return () => clearInterval(timer);
+      }, [active, root]);
+
+      // 提示两秒后自己消失
+      useEffect(() => {
+        if (notice === null) return undefined;
+        const timer = setTimeout(() => setNotice(null), 2600);
+        return () => clearTimeout(timer);
+      }, [notice]);
+
+      const entries = tree.data && Array.isArray(tree.data.entries) ? tree.data.entries : [];
+      const counts = tree.data && tree.data.counts ? tree.data.counts : { files: 0, dirs: 0 };
+      const truncated = tree.data ? tree.data.truncated === true : false;
+      const changeMap = useMemo(() => {
+        const map = new Map();
+        const files = changes && Array.isArray(changes.files) ? changes.files : [];
+        for (const file of files) if (typeof file.path === 'string') map.set(file.path, file);
+        return map;
+      }, [changes]);
+      const changedTotal = changes && changes.totals && typeof changes.totals.files === 'number' ? changes.totals.files : changeMap.size;
+      const queryTrim = query.trim();
+
+      const visible = useMemo(() => {
+        let list;
+        if (onlyChanged) list = entries.filter((entry) => entry.type !== 'dir' && changeMap.has(entry.rel));
+        else if (queryTrim.length > 0) {
+          const scored = [];
+          for (const entry of entries) {
+            if (entry.type === 'dir') continue;
+            const score = fuzzyScore(queryTrim, entry.rel);
+            if (score !== null) scored.push({ entry, score });
+          }
+          scored.sort((left, right) => right.score - left.score || left.entry.rel.localeCompare(right.entry.rel));
+          return scored.map((item) => item.entry);
+        } else list = entries.filter((entry) => entry.dir === cwd);
+
+        const direction = sortDir === 'desc' ? -1 : 1;
+        const pick = (entry) => (sortKey === 'mtime' ? entry.mtimeMs || 0 : sortKey === 'size' ? entry.size || 0 : String(entry.name || '').toLowerCase());
+        const sorted = [...list].sort((left, right) => {
+          const a = pick(left);
+          const b = pick(right);
+          if (a === b) return String(left.name || '').localeCompare(String(right.name || ''));
+          return a < b ? -direction : direction;
+        });
+        if (!queryTrim && !onlyChanged) {
+          // 目录优先；稳定排序保留组内排序结果
+          return sorted.sort((left, right) => (left.type === 'dir' ? 0 : 1) - (right.type === 'dir' ? 0 : 1));
+        }
+        return sorted;
+      }, [entries, cwd, queryTrim, onlyChanged, changeMap, sortKey, sortDir]);
+
+      const crumbs = cwd.length > 0 ? cwd.split('/') : [];
+
+      const openDialog = (next) => setDialog({ ...next });
+      const closeDialog = () => {
+        setDialogBusy(false);
+        setDialog(null);
+      };
+
+      const refresh = () => setRefreshSeq((value) => value + 1);
+
+      const submitDialog = async (payload) => {
+        if (dialog === null) return;
+        setDialogBusy(true);
+        let result;
+        let createdRel = null;
+        if (dialog.kind === 'create-file') {
+          createdRel = joinRel(dialog.cwd, payload.name);
+          result = await apiPost('/files/create', { root, rel: createdRel, kind: 'file', content: '' });
+        } else if (dialog.kind === 'create-dir') {
+          result = await apiPost('/files/create', { root, rel: joinRel(dialog.cwd, payload.name), kind: 'dir' });
+        } else if (dialog.kind === 'rename') {
+          result = await apiPost('/files/rename', { root, from: dialog.rel, to: joinRel(dirOfRel(dialog.rel), payload.name) });
+        } else {
+          result = await apiPost('/files/delete', { root, rel: dialog.rel, recursive: payload.recursive === true });
+        }
+        setDialogBusy(false);
+        if (result.ok !== true) {
+          setDialog((prev) => (prev === null ? prev : { ...prev, error: result }));
+          return;
+        }
+        if (dialog.kind === 'create-file') setNotice({ kind: 'ok', text: translate(t, 'fm.created', { name: payload.name }) });
+        else if (dialog.kind === 'create-dir') setNotice({ kind: 'ok', text: translate(t, 'fm.created', { name: payload.name }) });
+        else if (dialog.kind === 'rename') setNotice({ kind: 'ok', text: translate(t, 'fm.renamed') });
+        else setNotice({ kind: 'ok', text: translate(t, 'fm.deleted', { name: dialog.name }) });
+        setDialog(null);
+        refresh();
+        bumpGit();
+        if (dialog.kind === 'create-file' && createdRel !== null) runtime.openEditor(rootPathOf(root, createdRel));
+      };
+
+      const onRowClick = (entry) => {
+        setSelection(entry.rel);
+        if (entry.type === 'dir') {
+          setCwd(entry.rel);
+          setQuery('');
+          return;
+        }
+        runtime.openEditor(rootPathOf(root, entry.rel));
+      };
+
+      const rowActions = (entry) =>
+        h(
+          'span',
+          { className: 'dsh-ef-fm-actions', style: { display: 'inline-flex', gap: '2px', flex: 'none' }, onClick: (event) => event.stopPropagation() },
+          h(ToolButton, {
+            title: translate(t, 'fm.rename'),
+            onClick: () => openDialog({ kind: 'rename', rel: entry.rel, name: entry.name, cwd: dirOfRel(entry.rel) }),
+            style: { width: '22px', height: '22px', minWidth: '22px', padding: 0 },
+            children: h(IconPencil, { size: 12 }),
+          }),
+          h(ToolButton, {
+            title: translate(t, 'fm.delete'),
+            onClick: () => openDialog({ kind: 'delete', rel: entry.rel, name: entry.name, isDir: entry.type === 'dir' }),
+            style: { width: '22px', height: '22px', minWidth: '22px', padding: 0, color: ERROR },
+            children: h(IconTrash, { size: 12 }),
+          }),
+        );
+
+      const staleHost = tree.error !== null && tree.error.reason === 'bad-response' && tree.error.httpStatus === 404;
+
+      const restartDesktop = async () => {
+        if (restartPhase === 'busy') return;
+        const message = translate(t, 'fm.restartConfirm');
+        try {
+          if (typeof window.confirm === 'function' && window.confirm(message) !== true) return;
+        } catch {
+          /* 没有 confirm 就直接重启 */
+        }
+        setRestartPhase('busy');
+        try {
+          const response = await fetch('/api/desktop/restart', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: '{}',
+          });
+          if (response.status >= 400) setRestartPhase('failed');
+        } catch (error) {
+          console.warn(LOG + '重启 DSH 请求失败：', error);
+          setRestartPhase('failed');
+        }
+      };
+
+      const header = h(
+        'div',
+        {
+          style: {
+            flex: 'none',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '10px',
+            padding: '18px 22px 12px',
+            borderBottom: `0.5px solid ${LINE_1}`,
+          },
+        },
+        h(
+          'div',
+          { style: { display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' } },
+          h('span', { style: { color: BRAND, display: 'flex' } }, h(IconFolder, { size: 20 })),
+          h('span', { style: { fontSize: '16px', fontWeight: 600 } }, translate(t, 'fm.title')),
+          workspaceList.length > 1
+            ? h(
+                'select',
+                {
+                  value: root,
+                  onChange: (event) => setRoot(event.target.value),
+                  title: translate(t, 'fm.pickWorkspace'),
+                  style: {
+                    font: 'inherit',
+                    fontSize: '12.5px',
+                    padding: '4px 8px',
+                    borderRadius: '6px',
+                    border: `0.5px solid ${LINE_2}`,
+                    background: BG_1,
+                    color: INK,
+                    maxWidth: '300px',
+                  },
+                },
+                workspaceList.map((item) => h('option', { key: item.workspaceId, value: item.path }, item.title)),
+                root.length > 0 && !workspaceList.some((item) => item.path === root) ? h('option', { key: 'custom', value: root }, basename(root)) : null,
+              )
+            : null,
+          h('span', { style: { flex: '1 1 auto' } }),
+          changedTotal > 0
+            ? h('span', { style: { ...S.chip, color: WARN, borderColor: 'transparent', background: 'rgba(210,153,34,.14)' } }, translate(t, 'fm.changed', { n: changedTotal }))
+            : h('span', { style: { ...S.chip, color: OK, borderColor: 'transparent', background: 'rgba(63,185,80,.12)' } }, `✓ ${translate(t, 'fm.clean')}`),
+          h(ToolButton, { title: translate(t, 'fm.refresh'), onClick: refresh, children: h(IconRefresh, {}) }),
+        ),
+        h(
+          'div',
+          { style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' } },
+          // 面包屑
+          h(
+            'div',
+            { style: { display: 'flex', alignItems: 'center', gap: '2px', minWidth: 0, flex: '1 1 320px', flexWrap: 'wrap' } },
+            h(
+              'button',
+              {
+                type: 'button',
+                className: 'dsh-ef-btn',
+                onClick: () => {
+                  setCwd('');
+                  setQuery('');
+                },
+                style: { ...S.btn, height: '22px', padding: '0 6px', color: cwd.length === 0 ? INK : INK_2, ...S.mono },
+                title: root,
+              },
+              basename(root) || '/',
+            ),
+            ...crumbs.map((segment, index) => {
+              const rel = crumbs.slice(0, index + 1).join('/');
+              return h(
+                'span',
+                { key: rel, style: { display: 'inline-flex', alignItems: 'center', gap: '2px', minWidth: 0 } },
+                h('span', { style: { color: INK_3, fontSize: '11px' } }, '/'),
+                h(
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'dsh-ef-btn',
+                    onClick: () => {
+                      setCwd(rel);
+                      setQuery('');
+                    },
+                    style: { ...S.btn, height: '22px', padding: '0 6px', color: index === crumbs.length - 1 ? INK : INK_2, ...S.mono },
+                  },
+                  segment,
+                ),
+              );
+            }),
+          ),
+        ),
+        h(
+          'div',
+          { style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' } },
+          h(
+            'span',
+            {
+              style: {
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                flex: '1 1 260px',
+                maxWidth: '420px',
+                padding: '0 10px',
+                height: '28px',
+                borderRadius: '7px',
+                border: `0.5px solid ${LINE_2}`,
+                background: BG_1,
+                color: INK_2,
+              },
+            },
+            h(IconSearch, { size: 13 }),
+            h('input', {
+              className: 'dsh-ef-fm-input',
+              value: query,
+              placeholder: translate(t, 'fm.search'),
+              title: translate(t, 'fm.searchHint'),
+              onChange: (event) => setQuery(event.target.value),
+              onKeyDown: (event) => {
+                if (event.key === 'Escape') setQuery('');
+              },
+              style: {
+                flex: '1 1 auto',
+                minWidth: 0,
+                border: 0,
+                outline: 'none',
+                background: 'transparent',
+                color: INK,
+                font: 'inherit',
+                fontSize: '12.5px',
+                height: '26px',
+              },
+            }),
+            query.length > 0
+              ? h(ToolButton, { title: translate(t, 'action.close'), onClick: () => setQuery(''), children: h(IconClose, { size: 11 }), style: { width: '18px', height: '18px', minWidth: '18px', padding: 0 } })
+              : null,
+          ),
+          h(
+            'select',
+            {
+              value: sortKey,
+              onChange: (event) => setSortKey(event.target.value),
+              title: translate(t, 'fm.sortName'),
+              style: {
+                font: 'inherit',
+                fontSize: '12px',
+                padding: '4px 8px',
+                height: '28px',
+                borderRadius: '7px',
+                border: `0.5px solid ${LINE_2}`,
+                background: BG_1,
+                color: INK_2,
+              },
+            },
+            h('option', { value: 'name' }, translate(t, 'fm.sortName')),
+            h('option', { value: 'mtime' }, translate(t, 'fm.sortTime')),
+            h('option', { value: 'size' }, translate(t, 'fm.sortSize')),
+          ),
+          h(ToolButton, {
+            title: sortDir === 'asc' ? translate(t, 'fm.sortAsc') : translate(t, 'fm.sortDesc'),
+            onClick: () => setSortDir((value) => (value === 'asc' ? 'desc' : 'asc')),
+            style: { width: '28px', height: '28px', minWidth: '28px', padding: 0, border: `0.5px solid ${LINE_2}` },
+            children: sortDir === 'asc' ? h(IconSortUp, { size: 12 }) : h(IconSortDown, { size: 12 }),
+          }),
+          h(ToolButton, {
+            title: translate(t, 'fm.onlyChanged'),
+            active: onlyChanged,
+            onClick: () => setOnlyChanged((value) => !value),
+            label: translate(t, 'fm.onlyChanged'),
+            style: { height: '28px', border: `0.5px solid ${LINE_2}` },
+          }),
+          h(ToolButton, {
+            title: translate(t, 'fm.showIgnored'),
+            active: includeIgnored,
+            onClick: () => setIncludeIgnored((value) => !value),
+            label: translate(t, 'fm.showIgnored'),
+            style: { height: '28px', border: `0.5px solid ${LINE_2}` },
+          }),
+          h('span', { style: { flex: '1 1 auto' } }),
+          h(
+            'button',
+            {
+              type: 'button',
+              className: 'dsh-ef-btn',
+              title: translate(t, 'fm.newFile'),
+              disabled: root.length === 0,
+              onClick: () => openDialog({ kind: 'create-file', cwd }),
+              style: { ...S.btn, height: '28px', border: `0.5px solid ${LINE_2}`, padding: '0 10px' },
+            },
+            h(IconPlus, { size: 12 }),
+            h('span', null, translate(t, 'fm.newFile')),
+          ),
+          h(
+            'button',
+            {
+              type: 'button',
+              className: 'dsh-ef-btn',
+              title: translate(t, 'fm.newDir'),
+              disabled: root.length === 0,
+              onClick: () => openDialog({ kind: 'create-dir', cwd }),
+              style: { ...S.btn, height: '28px', border: `0.5px solid ${LINE_2}`, padding: '0 10px' },
+            },
+            h(IconPlus, { size: 12 }),
+            h('span', null, translate(t, 'fm.newDir')),
+          ),
+        ),
+      );
+
+      const body = [];
+      if (root.length === 0) {
+        body.push(h('div', { key: 'empty', style: { padding: '26px 24px', fontSize: '13px', color: INK_3 } }, translate(t, 'fm.noWorkspace')));
+      } else if (tree.loading && tree.data === null) {
+        body.push(h('div', { key: 'loading', style: { padding: '26px 24px', fontSize: '13px', color: INK_3 } }, translate(t, 'fm.loading')));
+      } else if (tree.error !== null) {
+        body.push(
+          h(
+            'div',
+            { key: 'error', style: { padding: '26px 24px', display: 'flex', flexDirection: 'column', gap: '10px' } },
+            staleHost
+              ? h('div', { style: { fontSize: '13px', color: WARN, fontWeight: 600 } }, translate(t, 'fm.restartNeeded'))
+              : h('div', { style: { fontSize: '13px', color: ERROR } }, reasonText(t, tree.error.reason, tree.error)),
+            staleHost
+              ? h('div', { style: { fontSize: '12px', color: INK_3, maxWidth: '720px', lineHeight: 1.7 } }, translate(t, 'fm.restartHint'))
+              : null,
+            h(
+              'div',
+              { style: { display: 'flex', gap: '8px', alignItems: 'center' } },
+              h(
+                'button',
+                {
+                  type: 'button',
+                  className: 'dsh-ef-btn',
+                  onClick: refresh,
+                  style: { ...S.btn, border: `0.5px solid ${LINE_2}`, height: '28px', padding: '0 12px' },
+                },
+                translate(t, 'action.retry'),
+              ),
+              staleHost
+                ? h(
+                    'button',
+                    {
+                      type: 'button',
+                      className: 'dsh-ef-btn',
+                      disabled: restartPhase === 'busy',
+                      onClick: restartDesktop,
+                      style: { ...S.btn, ...S.btnPrimary, height: '28px' },
+                    },
+                    restartPhase === 'busy' ? translate(t, 'fm.restarting') : translate(t, 'fm.restartButton'),
+                  )
+                : null,
+              staleHost && restartPhase === 'failed'
+                ? h('span', { style: { fontSize: '12px', color: ERROR } }, translate(t, 'fm.restartFailed'))
+                : null,
+            ),
+          ),
+        );
+      } else if (visible.length === 0) {
+        body.push(
+          h('div', { key: 'empty-list', style: { padding: '26px 24px', fontSize: '13px', color: INK_3 } },
+            queryTrim.length > 0 || onlyChanged ? translate(t, 'fm.emptySearch') : translate(t, 'fm.empty')),
+        );
+      } else {
+        body.push(
+          h(
+            'div',
+            { key: 'list', className: 'dsh-ef-scroll', style: { flex: '1 1 auto', minHeight: 0, overflowY: 'auto' } },
+            visible.map((entry) => {
+              const change = changeMap.get(entry.rel);
+              const status = change ? (change.untracked === true ? 'A' : change.status) : null;
+              return h(
+                'div',
+                {
+                  key: entry.rel,
+                  className: 'dsh-ef-fm-row',
+                  'data-selected': selection === entry.rel ? '1' : undefined,
+                  role: 'button',
+                  tabIndex: 0,
+                  title: rootPathOf(root, entry.rel),
+                  onClick: () => onRowClick(entry),
+                  onKeyDown: (event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      onRowClick(entry);
+                    }
+                  },
+                  style: {
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    height: '28px',
+                    padding: '0 14px 0 22px',
+                    fontSize: '12.5px',
+                    color: INK,
+                    cursor: 'pointer',
+                    borderBottom: `0.5px solid ${LINE_1}`,
+                    minWidth: 0,
+                  },
+                },
+                h('span', { style: { flex: 'none', display: 'flex', color: entry.type === 'dir' ? BRAND : INK_3 } }, entryIcon(entry)),
+                h(
+                  'span',
+                  {
+                    style: {
+                      flex: '0 1 auto',
+                      minWidth: 0,
+                      maxWidth: '46%',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      fontWeight: entry.type === 'dir' ? 600 : 400,
+                    },
+                  },
+                  entry.name,
+                ),
+                queryTrim.length > 0 || onlyChanged
+                  ? h('span', { style: { flex: '1 1 auto', minWidth: 0, ...S.mono, color: INK_3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, entry.dir)
+                  : h('span', { style: { flex: '1 1 auto' } }),
+                status !== null
+                  ? h(
+                      'span',
+                      {
+                        style: {
+                          flex: 'none',
+                          minWidth: '14px',
+                          textAlign: 'center',
+                          fontFamily: MONO,
+                          fontSize: '10.5px',
+                          fontWeight: 700,
+                          color: statusColor(status),
+                        },
+                        title: translate(t, `status.${status}`),
+                      },
+                      status,
+                    )
+                  : null,
+                h('span', { style: { flex: 'none', width: '56px', textAlign: 'right', ...S.mono, color: INK_3 } }, entry.type === 'dir' ? '' : formatSizeShort(entry.size)),
+                h('span', { style: { flex: 'none', width: '108px', textAlign: 'right', ...S.mono, color: INK_3 } }, formatMtime(entry.mtimeMs)),
+                rowActions(entry),
+              );
+            }),
+          ),
+          h(
+            'div',
+            {
+              key: 'footer',
+              style: {
+                flex: 'none',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                padding: '7px 22px',
+                borderTop: `0.5px solid ${LINE_1}`,
+                fontSize: '11.5px',
+                color: INK_3,
+                minWidth: 0,
+              },
+            },
+            h('span', null, translate(t, 'fm.summary', { files: counts.files || 0, dirs: counts.dirs || 0 })),
+            truncated ? h('span', { style: { color: WARN } }, translate(t, 'fm.truncated', { n: tree.data.limit || '—' })) : null,
+            notice !== null ? h('span', { style: { color: notice.kind === 'ok' ? OK : ERROR } }, notice.text) : null,
+            h('span', { style: { flex: '1 1 auto' } }),
+            h('span', null, translate(t, 'fm.openHint')),
+          ),
+        );
+      }
+
+      return h(
+        'div',
+        { 'data-edit-files-panel': '1', style: { display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, color: INK, background: 'var(--dsw-alias-bg-base, #17181c)' } },
+        header,
+        body.length > 0 ? body[0] : null,
+        body.length > 1 ? body[1] : null,
+        dialog !== null
+          ? h(FileDialog, {
+              t,
+              dialog,
+              busy: dialogBusy,
+              onCancel: closeDialog,
+              onSubmit: submitDialog,
+            })
+          : null,
+      );
+    };
+
     // ───────────────────────────────────────────────────────── apply
 
     const plugin = {
@@ -2449,21 +3622,41 @@ window.__ModuleLoader__.load({
 
         // ⑨ cordis_inspect 只读自检入口
         installInspectProvider(ctx);
+
+        // ⑩ 工程文件面板：左栏图标 + 主面板页
+        ctx.slots.inject('main', () =>
+          ctx.slots.register(
+            { name: 'main', key: PANEL_ID, locale: NS },
+            guarded('file-manager', FileManagerPage),
+          ));
+        ctx.slots.inject('sidebar.panellist', () =>
+          ctx.slots.register(
+            { name: 'sidebar.panellist', id: PANEL_ID, order: 30, locale: NS, label: () => translate(t, 'fm.title') },
+            guarded('file-manager-icon', FileManagerIcon),
+          ));
       },
     };
 
     // 自检脚本（test/client-selftest.mjs）用：只有页面显式打开测试开关时才挂，正常运行时不存在。
     if (typeof window !== 'undefined' && window.__DSH_EDIT_FILES_TEST__ === true) {
       plugin.__test = {
-        constants: { NS, API, TAB_ID, TAB_KIND },
+        constants: { NS, API, TAB_ID, TAB_KIND, PANEL_ID },
         dictionaries: { zh: ZH, en: EN },
         translate,
         parseUnifiedDiff,
         workspacePathOf,
+        workspaceListOf,
+        currentSessionIdOf,
         basename,
         dirnameOf,
         shortPath,
         formatBytes,
+        formatMtime,
+        formatSizeShort,
+        joinRel,
+        dirOfRel,
+        rootPathOf,
+        fuzzyScore,
         reasonText,
       };
     }

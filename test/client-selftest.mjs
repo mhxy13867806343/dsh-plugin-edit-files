@@ -226,7 +226,7 @@ check('client.js 里 translate() 用到的 key 都能在字典里找到', () => 
   assert.deepEqual(missing, [], `缺 key: ${missing.join(', ')}`);
 });
 
-check('注册了八个 slot 入口', () => {
+check('注册了十个 slot 入口（含文件面板）', () => {
   const seen = registrations.map((item) => `${item.options.name}#${item.options.id || item.options.key || ''}`);
   for (const expected of [
     'shell.overlay#edit-files-editor',
@@ -237,9 +237,22 @@ check('注册了八个 slot 入口', () => {
     'sidebar.workspaces.session.menu.item#edit-files-git-menu',
     'sidebar.workspaces.session.row.action#edit-files-git-row',
     'sidebar.right.pane.tab#dsh-plugin-edit-files/git',
+    'main#edit-files-browser',
+    'sidebar.panellist#edit-files-browser',
   ]) {
     assert.ok(seen.indexOf(expected) >= 0, `缺注册：${expected}；实际：${seen.join(', ')}`);
   }
+});
+
+check('文件面板的 pane 图标带 label，主面板用同一个 key', () => {
+  const panel = registrations.find((item) => item.options.name === 'sidebar.panellist' && item.options.id === 'edit-files-browser');
+  assert.ok(panel, '缺 sidebar.panellist 注册');
+  assert.equal(typeof panel.options.label, 'function');
+  assert.equal(typeof panel.options.label(), 'string');
+  assert.equal(typeof panel.Component, 'function');
+  const main = registrations.find((item) => item.options.name === 'main');
+  assert.ok(main, '缺 main 注册');
+  assert.equal(main.options.key, panel.options.id);
 });
 
 check('没有 locale 的槽位用 id 注册（工作区快照桥）', () => {
@@ -285,8 +298,10 @@ check('样式只注入一次（重复 apply 不会叠两份）', () => {
 check('slot inject 的等待顺序覆盖全部入口', () => {
   assert.deepEqual(injectedSlots.sort(), [
     'conversation.session.header.utilities',
+    'main',
     'shell.overlay',
     'shell.overlay',
+    'sidebar.panellist',
     'sidebar.right.pane.tab',
     'sidebar.right.tab.document.actions',
     'sidebar.right.tab.files.actions',
@@ -374,6 +389,64 @@ check('reasonText：把 Host reason 翻成人话', () => {
   assert.ok(internals.reasonText(t, 'too-large', { limit: 2097152 }).includes('2.0 MB'));
   assert.ok(internals.reasonText(t, 'not-found').includes('不存在'));
   assert.ok(internals.reasonText(t, 'git-unavailable').includes('git'));
+});
+
+console.log('\n[2b] 文件面板纯函数');
+
+check('fuzzyScore：子序列命中 + 大小写无关 + 不命中返回 null', () => {
+  assert.ok(internals.fuzzyScore('mnts', 'src/main.ts') > 0);
+  assert.ok(internals.fuzzyScore('readme', 'README.md') > 0);
+  assert.equal(internals.fuzzyScore('zzz', 'src/main.ts'), null);
+  assert.equal(internals.fuzzyScore('ts', 'a.ts'), 0 + internals.fuzzyScore('ts', 'a.ts'));
+  // 连续命中应该比分散命中分高
+  assert.ok(internals.fuzzyScore('main', 'main.ts') > internals.fuzzyScore('main', 'm_a_i_n.ts'));
+  // 空查询对任何候选都算 0 分命中
+  assert.equal(internals.fuzzyScore('', 'anything'), 0);
+});
+
+check('joinRel / dirOfRel / rootPathOf：相对路径拼接', () => {
+  assert.equal(internals.joinRel('', 'a.md'), 'a.md');
+  assert.equal(internals.joinRel('src', 'a.md'), 'src/a.md');
+  assert.equal(internals.joinRel('/src/', '/a.md'), 'src/a.md');
+  assert.equal(internals.joinRel('src', ''), 'src');
+  assert.equal(internals.dirOfRel('src/a/b.md'), 'src/a');
+  assert.equal(internals.dirOfRel('a.md'), '');
+  assert.equal(internals.rootPathOf('/repo/', 'src/a.md'), '/repo/src/a.md');
+  assert.equal(internals.rootPathOf('/repo', ''), '/repo');
+});
+
+check('workspaceListOf / currentSessionIdOf：从快照找当前工作区', () => {
+  const workspaces = {
+    items: [
+      { workspaceId: 'w1', path: '/Users/me/a', title: 'A', sessionIds: ['s1'] },
+      { workspaceId: 'w2', path: '/Users/me/b', title: '', sessionIds: ['s2'] },
+      { workspaceId: 'w3', path: null },
+    ],
+  };
+  const list = internals.workspaceListOf(workspaces);
+  assert.equal(list.length, 2);
+  assert.deepEqual(list[0], { workspaceId: 'w1', path: '/Users/me/a', title: 'A', sessionIds: ['s1'] });
+  assert.equal(list[1].title, 'b');
+  const sessions = { byId: { s1: { retainedBy: { mainView: 0 } }, s2: { retainedBy: { mainView: 2 } } } };
+  assert.equal(internals.currentSessionIdOf(sessions), 's2');
+  assert.equal(internals.currentSessionIdOf({ byId: {} }), undefined);
+  assert.equal(internals.currentSessionIdOf(null), undefined);
+});
+
+check('formatMtime / formatSizeShort', () => {
+  assert.equal(internals.formatSizeShort(0), '');
+  assert.equal(internals.formatSizeShort(512), '512B');
+  assert.equal(internals.formatSizeShort(2048), '2K');
+  assert.equal(internals.formatSizeShort(3 * 1024 * 1024), '3.0M');
+  assert.match(internals.formatMtime(Date.UTC(2026, 0, 2, 3, 4)), /^2026-01-02 \d\d:\d\d$/u);
+  assert.equal(internals.formatMtime(undefined), '');
+});
+
+check('reasonText：文件面板的错误原因也有文案', () => {
+  const t = (key) => internals.dictionaries.zh[key];
+  assert.equal(internals.reasonText(t, 'already-exists'), '目标已存在');
+  assert.equal(internals.reasonText(t, 'protected-path'), '受保护路径（.git）');
+  assert.equal(internals.reasonText(t, 'outside-root'), '路径超出工作区');
 });
 
 console.log('\n[3] 页面侧自检 provider（用假 fetch 走一遍 probe）');

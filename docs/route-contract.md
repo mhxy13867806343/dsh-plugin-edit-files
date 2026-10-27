@@ -9,6 +9,7 @@
 - 所有响应都是 JSON（`content-type: application/json; charset=utf-8`、`cache-control: no-store`）。
 - **永不抛异常到路由之外**：任何失败都返回 `{ ok: false, reason, error? }` + 合适的 HTTP 状态码。
 - 参数：`GET` 从 query 取，`POST` 从 JSON body 取；同名字段两种都接受（便于 curl）。
+  例外：第 8 节的三个写路由**只认 JSON body**（不读 query），body 缺失或不是 JSON 对象 → 400 `missing-json`。
 
 配置（`cordis.patch.yml` 的 `config`，全部可选）：
 
@@ -17,6 +18,16 @@
 | `maxFileBytes` | `2097152` | 单个文件读取/保存上限（字节） |
 | `maxDiffLines` | `4000` | 单个文件 diff 最多回传行数 |
 | `maxChangedFiles` | `3000` | 一次改动列表最多回传条数 |
+| `maxTreeEntries` | `20000` | 文件树一次最多回传的条目数（请求 `limit` 只能更小） |
+| `treeIgnores` | 见下 | 文件树默认忽略的目录名（数组；`.git` 永远忽略） |
+
+`treeIgnores` 默认值（传非数组回退默认；空数组表示只忽略 `.git`）：
+
+```json
+["node_modules", ".git", "dist", "build", "out", ".next", ".nuxt", ".turbo", "target",
+ "coverage", ".venv", "venv", "__pycache__", ".pytest_cache", ".cache", ".parcel-cache",
+ ".svelte-kit", ".expo", ".output"]
+```
 
 ---
 
@@ -201,3 +212,93 @@
 - 所有 git 入口先调 `git/info` 或 `git/file`，`isRepo === false` 时**不渲染任何入口**（需求：没有 git 就不展示）。
 - 「已改动」的文件才展示 diff；列表为空时显示「与远程一致」。
 - 编辑器读盘用 `file/read`、保存用 `file/write`，保存时带 `expectedMtimeMs`（来自 read 或上次 save），遇到 `conflict` 由 UI 让用户选择覆盖。
+
+---
+
+## 8. 工程文件浏览与增删改
+
+「文件」面板用：浏览工作区目录树 + 新建 / 重命名 / 删除。四条路由与第 1-7 节共用响应约定
+（JSON、`cache-control: no-store`、永不抛异常）。
+
+**这三个写路由（create / rename / delete）只认 JSON body，不读 query**：写操作不能被一个 URL 触发；
+body 缺失、不是合法 JSON、或不是 JSON 对象（数组/`null` 都算）→ 400 `missing-json`。
+
+### 8.1 `GET /api/edit-files/files/tree`
+
+query：`root=<绝对目录>`（必填）、`includeIgnored=1`（可选）、`limit=<正整数>`（可选）。
+
+递归列出 root 下的目录与文件，**平铺**返回：每个条目的 `rel` 是相对 root 的路径，`dir` 是它相对 root
+的父目录（空串 = root 层），前端按 `dir === cwd` 过滤即可逐层浏览。
+
+```json
+{
+  "ok": true,
+  "root": "/Users/me/project",
+  "entries": [
+    { "rel": "src", "name": "src", "dir": "", "type": "dir", "size": 0, "mtimeMs": 1730000000000 },
+    { "rel": "src/main.ts", "name": "main.ts", "dir": "src", "type": "file", "size": 123, "mtimeMs": 1730000000000 },
+    { "rel": "link", "name": "link", "dir": "", "type": "symlink", "size": 0, "mtimeMs": 1730000000000 }
+  ],
+  "counts": { "files": 2, "dirs": 3 },
+  "truncated": false,
+  "ignored": ["node_modules", ".git"],
+  "limit": 20000
+}
+```
+
+- `entries` 按 `rel` 字典序；`type` 只有 `file` / `dir` / `symlink`。
+- `counts.files` 统计普通文件与符号链接（所有非目录条目），`counts.dirs` 只统计目录。
+- 目录与符号链接的 `size` 固定回 `0`；`mtimeMs` 取 lstat 结果。
+- **不跟随符号链接目录**（避免目录环）：符号链接只返回条目本身，不展开；`root` 本身是符号链接目录时可以正常列。
+- 默认跳过 `treeIgnores` 里的目录名与**任何层级**名为 `.git` 的条目；`includeIgnored=1` 时展开 `treeIgnores`
+  目录，但 `.git` 永远跳过。隐藏文件（`.` 开头）正常返回。
+- `ignored`：遍历过程中实际跳过的忽略目录名（去重；按 `treeIgnores` 配置顺序回传，不在列表里的名字追加在末尾），
+  供前端显示「已忽略」。
+- 条目上限 = `min(请求 limit, maxTreeEntries)`（limit 只能更小）；超出时只回已遍历的前 N 条并置
+  `truncated: true`。响应里的 `limit` 是本次生效的上限，供前端显示「只显示前 N 条」。
+- 错误：缺 `root` → 400 `missing-root`；`root` 不是绝对路径 → 400 `invalid-path`；
+  `root` 不存在 → 404 `not-found`；`root` 不是目录 → 400 `not-directory`。
+
+### 8.2 `POST /api/edit-files/files/create`
+
+body `{ "root": "/abs", "rel": "src/new.ts", "kind": "file" | "dir", "content": "…" }`
+
+- `rel` 是相对 root 的路径；`kind` 只认 `"dir"`，缺省/其它值按 `"file"` 处理。
+- 文件可带 `content`（字符串，缺省空串）；UTF-8 字节数超过 `maxFileBytes` → 413 `too-large`（带 `limit`）；
+  `content` 不是字符串 → 400 `invalid-path`。
+- 文件用 `flag: 'wx'` 创建（并发下也不覆盖），目录用 `mkdir`；目标已存在（含符号链接）→ 409 `already-exists`。
+- 父目录不存在或不是目录 → 400 `no-parent`；目标父目录经 realpath 跑出 root（符号链接逃逸）→ 400 `outside-root`。
+- 返回 `{ "ok": true, "rel": "src/new.ts", "kind": "file" }`。
+
+### 8.3 `POST /api/edit-files/files/rename`
+
+body `{ "root": "/abs", "from": "a.txt", "to": "dir/a.txt" }`
+
+- 支持同目录改名与移动到 root 内其它目录（文件/目录/符号链接都可以）。
+- `from` 不存在 → 404 `not-found`；`to` 已存在 → 409 `target-exists`；`to` 父目录不存在或不是目录 → 400 `no-parent`。
+- 目录不能移进自己内部 → 400 `invalid-path`。
+- `from` 是逃逸符号链接（真实路径在 root 外）→ 400 `outside-root`；`to` 的父目录是逃逸符号链接同样拒绝。
+- 返回 `{ "ok": true, "from": "a.txt", "to": "dir/a.txt" }`（回传规范化后的相对路径）。
+
+### 8.4 `POST /api/edit-files/files/delete`
+
+body `{ "root": "/abs", "rel": "dist", "recursive": true }`
+
+- 文件与符号链接直接删（删的是链接本身，不跟随）；目录必须 `recursive === true`，否则 409 `is-directory-needs-recursive`。
+- `rel` 为空串或只有 `.`（等于删 root 本身）→ 400 `root-itself`；`rel` 不存在 → 404 `not-found`。
+- `rel` 是逃逸符号链接（真实路径在 root 外）→ 400 `outside-root`，链接与目标都不会被删。
+- 返回 `{ "ok": true, "rel": "dist", "recursive": true }`（`recursive` 表示是否按目录递归删除）。
+
+### 8.5 四条路由共用的安全规则
+
+- `root` 必须是绝对路径且是现存目录：缺/空 → 400 `missing-root`；相对路径 → 400 `invalid-path`；
+  不存在 → 404 `not-found`；不是目录 → 400 `not-directory`。
+- `rel` / `from` / `to` 必须是 root 内的相对路径：
+  - 绝对路径、含 NUL 字节 → 400 `invalid-path`；
+  - 任何一段是 `..` → 400 `outside-root`（先拒绝，再谈规范化）；
+  - 空或只有 `.`（create / rename）→ 400 `missing-rel`（delete 则映射 400 `root-itself`）；
+  - 任何一层是 `.git`（大小写不敏感，`.git` 文件或目录都算）→ 403 `protected-path`。
+- 已存在路径（delete/rename 的源、create/rename 的目标父目录）先做 `realpath`：真实路径跑出 root
+  （符号链接逃逸）→ 400 `outside-root`。悬空符号链接按「操作链接本身」放行。
+- 所有 fs 错误都映射成 `{ ok: false, reason, error? }` + 合适状态码，不会把异常抛出路由之外；
+  未知错误走 500 `{ "ok": false, "reason": "error", "error": "…" }`。
